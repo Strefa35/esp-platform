@@ -1,9 +1,9 @@
 /**
- * @file manager.c
+ * @file eth.c
  * @author A.Czerwinski@pistacje.net
- * @brief Manager module
+ * @brief Ethernet Controller
  * @version 0.1
- * @date 2025-01-28
+ * @date 2025-01-31
  * 
  * @copyright Copyright (c) 2025 4Embedded.Systems
  * 
@@ -14,64 +14,64 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "manager.h"
-#include "mgr_reg.h"
-
-#include "mgr_reg_list.h"
+#include "msg.h"
+#include "eth_ctrl.h"
 
 
-static const char* TAG = "EWHC::MANAGER";
+static const char* TAG = "EWHC::COMPONENT:ETH";
 
 /**
- * @brief Init manager
+ * @brief Init Eth controller
  * 
  * \return esp_err_t 
  */
-esp_err_t MGR_Init(void) {
+esp_err_t EthCtrl_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
-    if (mgr_reg_list[idx].init_fn) {
-      mgr_reg_list[idx].init_fn();
-    }
-  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
 /**
- * @brief Run manager
+ * @brief Done Eth controller
  * 
  * \return esp_err_t 
  */
-esp_err_t MGR_Run(void) {
+esp_err_t EthCtrl_Done(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
-    if (mgr_reg_list[idx].run_fn) {
-      mgr_reg_list[idx].run_fn();
-    }
-  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
 /**
- * @brief Done manager
+ * @brief Run Eth controller
  * 
  * \return esp_err_t 
  */
-esp_err_t MGR_Done(void) {
+esp_err_t EthCtrl_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
-    if (mgr_reg_list[idx].done_fn) {
-      mgr_reg_list[idx].done_fn();
-    }
-  }
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief Sent message to the Eth controller thread
+ * 
+ * \return esp_err_t 
+ */
+esp_err_t EthCtrl_Send(const char* msg) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

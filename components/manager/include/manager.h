@@ -15,8 +15,11 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-bool MGR_Init(void);
-bool MGR_Run(void);
-bool MGR_Done(void);
+#include "esp_err.h"
+
+
+esp_err_t MGR_Init(void);
+esp_err_t MGR_Run(void);
+esp_err_t MGR_Done(void);
 
 #endif /* __MANAGER_H__ */

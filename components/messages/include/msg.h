@@ -12,6 +12,7 @@
 #ifndef __MSG_H__
 #define __MSG_H__
 
+#include "esp_err.h"
 
 
 #endif /* __MSG_H__ */
