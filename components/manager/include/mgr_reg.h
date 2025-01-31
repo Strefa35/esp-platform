@@ -8,8 +8,8 @@
  * @copyright Copyright (c) 2025 4Embedded.Systems
  * 
  */
-#ifndef __MGR_REG_LIST_H__
-#define __MGR_REG_LIST_H__
+#ifndef __MGR_REG_H__
+#define __MGR_REG_H__
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -33,4 +33,4 @@ typedef struct mgr_reg_s {
 } mgr_reg_t;
 
 
-#endif /* __MGR_REG_LIST_H__ */
+#endif /* __MGR_REG_H__ */

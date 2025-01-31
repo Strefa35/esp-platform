@@ -16,11 +16,11 @@
 
 #include "manager.h"
 #include "mgr_reg.h"
+
 #include "mgr_reg_list.h"
 
 
 static const char* TAG = "EWHC::MANAGER";
-
 
 /**
  * @brief Init manager
@@ -32,11 +32,11 @@ bool MGR_Init(void) {
   bool result = true;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  // for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
-  //   if (mgr_reg_list[idx].init_fn) {
-  //     mgr_reg_list[idx].init_fn();
-  //   }
-  // }
+  for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
+    if (mgr_reg_list[idx].init_fn) {
+      mgr_reg_list[idx].init_fn();
+    }
+  }
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
