@@ -404,6 +404,17 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# Heater Controller - Manager
+#
+CONFIG_ETH_CTRL_ENABLE=y
+CONFIG_CLI_CTRL_ENABLE=y
+CONFIG_GPIO_CTRL_ENABLE=y
+CONFIG_POWER_CTRL_ENABLE=y
+# CONFIG_TEMPLATE_CTRL_ENABLE is not set
+CONFIG_MQTT_CTRL_ENABLE=y
+# end of Heater Controller - Manager
+
+#
 # Compiler options
 #
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y

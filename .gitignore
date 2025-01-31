@@ -1,1 +1,5 @@
+# build folder
 build
+
+#Visual Studio Code folder
+.vscode

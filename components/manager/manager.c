@@ -22,6 +22,40 @@
 
 static const char* TAG = "EWHC::MANAGER";
 
+
+static esp_err_t mgr_Init(int id) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(id: %d, topic: %s)", __func__, id, mgr_reg_list[id].topic);
+  if (mgr_reg_list[id].init_fn) {
+    result = mgr_reg_list[id].init_fn();
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mgr_Run(int id) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(id: %d, topic: %s)", __func__, id, mgr_reg_list[id].topic);
+  if (mgr_reg_list[id].run_fn) {
+    result = mgr_reg_list[id].run_fn();
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mgr_Done(int id) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(id: %d, topic: %s)", __func__, id, mgr_reg_list[id].topic);
+  if (mgr_reg_list[id].done_fn) {
+    result = mgr_reg_list[id].done_fn();
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 /**
  * @brief Init manager
  * 
@@ -31,10 +65,9 @@ esp_err_t MGR_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGI(TAG, "Modules to register: %d", MGR_REG_LIST_CNT);
   for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
-    if (mgr_reg_list[idx].init_fn) {
-      mgr_reg_list[idx].init_fn();
-    }
+    result = mgr_Init(idx);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -50,9 +83,7 @@ esp_err_t MGR_Run(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
   for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
-    if (mgr_reg_list[idx].run_fn) {
-      mgr_reg_list[idx].run_fn();
-    }
+    result = mgr_Run(idx);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -68,9 +99,7 @@ esp_err_t MGR_Done(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
   for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
-    if (mgr_reg_list[idx].done_fn) {
-      mgr_reg_list[idx].done_fn();
-    }
+    result = mgr_Done(idx);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
