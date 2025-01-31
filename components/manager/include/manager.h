@@ -9,6 +9,14 @@
  * 
  */
 
+#ifndef __MANAGER_H__
+#define __MANAGER_H__
+
+#include <stdio.h>
+#include <stdbool.h>
+
 bool MGR_Init(void);
 bool MGR_Run(void);
 bool MGR_Done(void);
+
+#endif /* __MANAGER_H__ */
