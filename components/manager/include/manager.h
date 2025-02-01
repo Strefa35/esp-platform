@@ -17,9 +17,12 @@
 
 #include "esp_err.h"
 
+#include "msg.h"
+
 
 esp_err_t MGR_Init(void);
 esp_err_t MGR_Run(void);
 esp_err_t MGR_Done(void);
+esp_err_t MGR_Send(const msg_t* msg);
 
 #endif /* __MANAGER_H__ */

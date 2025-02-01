@@ -40,7 +40,7 @@
 
 #define MGR_REG_LIST_CNT  (sizeof(mgr_reg_list)/sizeof(mgr_reg_t))
 
-static const mgr_reg_t mgr_reg_list[] = {
+static mgr_reg_t mgr_reg_list[] = {
   /* ETH Controller MUST BE first element in mgr_reg_list */
 #ifdef CONFIG_ETH_CTRL_ENABLE
   {

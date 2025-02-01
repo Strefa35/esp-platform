@@ -67,7 +67,7 @@ esp_err_t EthCtrl_Run(void) {
  * 
  * \return esp_err_t 
  */
-esp_err_t EthCtrl_Send(const char* msg) {
+esp_err_t EthCtrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);

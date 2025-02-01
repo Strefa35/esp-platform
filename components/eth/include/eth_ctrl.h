@@ -20,6 +20,6 @@
 esp_err_t EthCtrl_Init(void);
 esp_err_t EthCtrl_Done(void);
 esp_err_t EthCtrl_Run(void);
-esp_err_t EthCtrl_Send(const char* msg);
+esp_err_t EthCtrl_Send(const msg_t* msg);
 
 #endif /* __ETH_CTRL_H__ */

@@ -8,13 +8,13 @@
  * @copyright Copyright (c) 2025 4Embedded.Systems
  * 
  */
+#include <string.h>
 
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "msg.h"
 #include "manager.h"
 #include "mgr_reg.h"
 
@@ -33,8 +33,8 @@ static const char* TAG = "EWHC::MANAGER";
 
 static int mgr_modules_cnt = MGR_REG_LIST_CNT;
 
-static QueueHandle_t mgr_msg_queue = NULL;
-static TaskHandle_t mgr_TaskId = NULL;
+static QueueHandle_t  mgr_msg_queue = NULL;
+static TaskHandle_t   mgr_task_id = NULL;
 
 
 static esp_err_t mgr_Init(int id) {
@@ -70,13 +70,58 @@ static esp_err_t mgr_Done(int id) {
   return result;
 }
 
+static mgr_reg_t* mgr_FindTopic(const char* topic) {
+  mgr_reg_t* slot_ptr = NULL;
+
+  ESP_LOGI(TAG, "++%s(topic: %s)", __func__, topic);
+  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+    if (strncmp(topic, mgr_reg_list[idx].topic, strlen(mgr_reg_list[idx].topic)) == 0) {
+      ESP_LOGD(TAG, "[%s] Topic: '%s' found.", __func__, topic);
+      slot_ptr = &mgr_reg_list[idx];
+      break;
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - slot_ptr: %p", __func__, slot_ptr);
+  return slot_ptr;
+}
+
+static esp_err_t mgr_MsgParse(const msg_t* msg) {
+  mgr_reg_t* slot_ptr = NULL;
+  esp_err_t result = ESP_ERR_NOT_FOUND;
+
+  ESP_LOGI(TAG, "++%s(type: %d, topic: '%s')", __func__, msg->type, msg->topic);
+  slot_ptr = mgr_FindTopic(msg->topic);
+  if (slot_ptr && slot_ptr->send_fn) {
+    result = slot_ptr->send_fn(msg);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief Manager task's function
+ * 
+ * @param param 
+ */
 static void mgr_TaskFn(void* param) {
+  msg_t msg;
   bool loop = true;
+  esp_err_t result;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+  memset(&msg, 0x00, sizeof(msg_t));
   while (loop) {
-    ESP_LOGI(TAG, "[%s] Loop...", __func__);
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    ESP_LOGD(TAG, "[%s] Wait...", __func__);
+    if(xQueueReceive(mgr_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
+      ESP_LOGD(TAG, "[%s] Message arrived: type: %d, topic: '%s'", __func__, msg.type, msg.topic);
+      result = mgr_MsgParse(&msg);
+      if (result != ESP_OK) {
+        // TODO - Send Error to the Broker
+        ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);
+      }
+    } else {
+      ESP_LOGE(TAG, "[%s] Message error.", __func__);
+    }
   }
   ESP_LOGI(TAG, "--%s()", __func__);
 }
@@ -95,9 +140,9 @@ esp_err_t MGR_Init(void) {
   mgr_msg_queue = xQueueCreate(MGR_MSG_MAX, sizeof(msg_t));
  
   /* Initialization manager thread */
-  xTaskCreate(mgr_TaskFn, MGR_TASK_NAME, MGR_TASK_STACK_SIZE, NULL, MGR_TASK_PRIORITY, &mgr_TaskId);
+  xTaskCreate(mgr_TaskFn, MGR_TASK_NAME, MGR_TASK_STACK_SIZE, NULL, MGR_TASK_PRIORITY, &mgr_task_id);
 
-  ESP_LOGI(TAG, "Modules to register: %d", mgr_modules_cnt);
+  ESP_LOGD(TAG, "Modules to register: %d", mgr_modules_cnt);
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
     result = mgr_Init(idx);
   }
@@ -132,6 +177,18 @@ esp_err_t MGR_Done(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
   for (int idx = mgr_modules_cnt - 1; idx >= 0; --idx) {
     result = mgr_Done(idx);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+esp_err_t MGR_Send(const msg_t* msg) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (xQueueSend(mgr_msg_queue, msg, (TickType_t) 0) != pdPASS) {
+    ESP_LOGE(TAG, "[%s] Message error. type: %d, topic: '%s'", __func__, msg->type, msg->topic);
+    result = ESP_FAIL;
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;

@@ -20,6 +20,6 @@
 esp_err_t TemplateCtrl_Init(void);
 esp_err_t TemplateCtrl_Done(void);
 esp_err_t TemplateCtrl_Run(void);
-esp_err_t TemplateCtrl_Send(const char* msg);
+esp_err_t TemplateCtrl_Send(const msg_t* msg);
 
 #endif /* __TEMPLATE_CTRL_H__ */
