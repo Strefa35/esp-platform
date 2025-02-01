@@ -23,6 +23,8 @@
 static const char* TAG = "EWHC::MANAGER";
 
 
+static int mgr_modules_cnt = MGR_REG_LIST_CNT;
+
 static esp_err_t mgr_Init(int id) {
   esp_err_t result = ESP_OK;
 
@@ -65,8 +67,9 @@ esp_err_t MGR_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  ESP_LOGI(TAG, "Modules to register: %d", MGR_REG_LIST_CNT);
-  for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
+  //mgr_modules_cnt = sizeof(mgr_reg_list)/sizeof(mgr_reg_t);
+  ESP_LOGI(TAG, "Modules to register: %d", mgr_modules_cnt);
+  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
     result = mgr_Init(idx);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
@@ -82,7 +85,7 @@ esp_err_t MGR_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
+  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
     result = mgr_Run(idx);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
@@ -98,7 +101,7 @@ esp_err_t MGR_Done(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  for (int idx = 0; idx < MGR_REG_LIST_CNT; ++idx) {
+  for (int idx = mgr_modules_cnt - 1; idx >= 0; --idx) {
     result = mgr_Done(idx);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);

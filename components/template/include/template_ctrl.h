@@ -9,17 +9,17 @@
  * 
  */
 
-#ifndef __ETH_CTRL_H__
-#define __ETH_CTRL_H__
+#ifndef __TEMPLATE_CTRL_H__
+#define __TEMPLATE_CTRL_H__
 
 #include <stdio.h>
 #include <stdbool.h>
 
 #include "esp_err.h"
 
-esp_err_t EthCtrl_Init(void);
-esp_err_t EthCtrl_Done(void);
-esp_err_t EthCtrl_Run(void);
-esp_err_t EthCtrl_Send(const char* msg);
+esp_err_t TemplateCtrl_Init(void);
+esp_err_t TemplateCtrl_Done(void);
+esp_err_t TemplateCtrl_Run(void);
+esp_err_t TemplateCtrl_Send(const char* msg);
 
-#endif /* __ETH_CTRL_H__ */
+#endif /* __TEMPLATE_CTRL_H__ */
