@@ -33,8 +33,9 @@ static const char* TAG = "EWHC::MANAGER";
 
 static int mgr_modules_cnt = MGR_REG_LIST_CNT;
 
-static QueueHandle_t  mgr_msg_queue = NULL;
-static TaskHandle_t   mgr_task_id = NULL;
+static QueueHandle_t      mgr_msg_queue = NULL;
+static TaskHandle_t       mgr_task_id = NULL;
+static SemaphoreHandle_t  mgr_sem_id = NULL;
 
 
 static esp_err_t mgr_Init(int id) {
@@ -123,6 +124,9 @@ static void mgr_TaskFn(void* param) {
       ESP_LOGE(TAG, "[%s] Message error.", __func__);
     }
   }
+  if (mgr_sem_id) {
+    xSemaphoreGive(mgr_sem_id);
+  }
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
@@ -138,9 +142,26 @@ esp_err_t MGR_Init(void) {
 
   /* Initialization message queue */
   mgr_msg_queue = xQueueCreate(MGR_MSG_MAX, sizeof(msg_t));
+  if (mgr_msg_queue == NULL)
+  {
+    ESP_LOGE(TAG, "[%s] xQueueCreate() failed.", __func__);
+    return ESP_FAIL;
+  }
+
+  mgr_sem_id = xSemaphoreCreateCounting(1, 0);
+  if (mgr_sem_id == NULL)
+  {
+    ESP_LOGE(TAG, "[%s] xSemaphoreCreateCounting() failed.", __func__);
+    return ESP_FAIL;
+  }
  
   /* Initialization manager thread */
   xTaskCreate(mgr_TaskFn, MGR_TASK_NAME, MGR_TASK_STACK_SIZE, NULL, MGR_TASK_PRIORITY, &mgr_task_id);
+  if (mgr_task_id == NULL)
+  {
+    ESP_LOGE(TAG, "[%s] xTaskCreate() failed.", __func__);
+    return ESP_FAIL;
+  }
 
   ESP_LOGD(TAG, "Modules to register: %d", mgr_modules_cnt);
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
@@ -162,6 +183,11 @@ esp_err_t MGR_Run(void) {
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
     result = mgr_Run(idx);
   }
+  if (mgr_sem_id) {
+    ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake...", __func__);
+    xSemaphoreTake(mgr_sem_id, portMAX_DELAY);
+    ESP_LOGD(TAG, "[%s] xSemaphoreTake was released.", __func__);
+  }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -177,6 +203,17 @@ esp_err_t MGR_Done(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
   for (int idx = mgr_modules_cnt - 1; idx >= 0; --idx) {
     result = mgr_Done(idx);
+  }
+  if (mgr_task_id) {
+    ESP_LOGD(TAG, "[%s] Task stopped", __func__);
+  }
+  if (mgr_sem_id) {
+    vSemaphoreDelete(mgr_sem_id);
+    ESP_LOGD(TAG, "[%s] Semaphore deleted", __func__);
+  }
+  if (mgr_msg_queue) {
+    vQueueDelete(mgr_msg_queue);
+    ESP_LOGD(TAG, "[%s] Queue deleted", __func__);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
