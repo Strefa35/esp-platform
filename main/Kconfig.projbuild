@@ -1,5 +1,7 @@
 menu "Heater Controller - Manager"
 
+    orsource "./Kconfig.level"
+
     config ETH_CTRL_ENABLE
         bool "Enable Ethernet Controller"
         default "y"
@@ -24,16 +26,16 @@ menu "Heater Controller - Manager"
         help
             Enable Power Controller to use by the Manager
 
+    config MQTT_CTRL_ENABLE
+        bool "Enable MQTT Controller"
+        default "y"
+        help
+            Enable MQTT Controller to use by the Manager
+
     config TEMPLATE_CTRL_ENABLE
         bool "Enable Template Controller"
         default "n"
         help
             Enable Template Controller to use by the Manager
 
-    config MQTT_CTRL_ENABLE
-        bool "Enable MQTT Controller"
-        default "y"
-        help
-            Enable MQTT Controller to use by the Manager
-      
 endmenu

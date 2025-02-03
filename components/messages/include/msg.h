@@ -15,27 +15,78 @@
 #include "esp_err.h"
 
 
-#define MSG_TOPIC_SIZE      20
-#define MSG_PAYLOAD_SIZE    100
+#define DATA_TOPIC_SIZE     20
+#define DATA_MSG_SIZE       100
 
-typedef char msg_topic_t[MSG_TOPIC_SIZE];
-typedef char msg_payload_t[MSG_PAYLOAD_SIZE];
+typedef char data_topic_t[DATA_TOPIC_SIZE];
+typedef char data_msg_t[DATA_MSG_SIZE];
 
 typedef enum {
-  MSG_TYPE_ETH,
-  MSG_TYPE_CLI,
-  MSG_TYPE_GPIO,
-  MSG_TYPE_POWER,
-  MSG_TYPE_MQTT,
-
-  MSG_TYPE_TEMPLATE,
+  MSG_TYPE_ETH_EVENT,
+  MSG_TYPE_ETH_IP,
 
 } msg_type_e;
 
+typedef enum {
+  MSG_CTRL_ALL,
+  MSG_CTRL_MGR,
+  MSG_CTRL_ETH,
+  MSG_CTRL_CLI,
+  MSG_CTRL_GPIO,
+  MSG_CTRL_POWER,
+  MSG_CTRL_MQTT,
+
+  MSG_CTRL_TEMPLATE,
+
+} ctrl_type_e;
+
 typedef struct {
-  msg_type_e    type;
-  msg_topic_t   topic;
-  msg_payload_t payload;
+
+} data_mgr_t;
+
+typedef struct {
+} data_eth_event_t;
+
+typedef struct {
+  char  event[20];
+  char  ip[20];
+  char  mask[20];
+  char  gw[20];
+} data_eth_t;
+
+typedef struct {
+
+} data_cli_t;
+
+typedef struct {
+
+} data_gpio_t;
+
+typedef struct {
+
+} data_power_t;
+
+typedef struct {
+  data_topic_t  topic;
+  data_msg_t    msg;
+} data_mqtt_t;
+
+/**
+ * @brief Message structure
+ * 
+ */
+typedef struct {
+  msg_type_e      type;
+  ctrl_type_e     from;
+  ctrl_type_e     to;
+  union {
+    data_mgr_t    mgr;
+    data_eth_t    eth;
+    data_cli_t    cli;
+    data_gpio_t   gpio;
+    data_power_t  power;
+    data_mqtt_t   mqtt;
+  } data;
 } msg_t;
 
 

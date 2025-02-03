@@ -1,0 +1,26 @@
+menu "Log Level"
+
+    orsource "./Kconfig.main"
+    orsource "./Kconfig.mgr"
+
+    if ETH_CTRL_ENABLE
+        orsource "./Kconfig.eth"
+    endif
+
+    if CLI_CTRL_ENABLE
+        orsource "./Kconfig.cli"
+    endif
+
+    if GPIO_CTRL_ENABLE    
+        orsource "./Kconfig.gpio"
+    endif
+
+    if POWER_CTRL_ENABLE    
+        orsource "./Kconfig.power"
+    endif
+
+    if MQTT_CTRL_ENABLE
+        orsource "./Kconfig.mqtt"
+    endif
+
+endmenu

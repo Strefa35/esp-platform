@@ -24,14 +24,17 @@
 
 #include "sdkconfig.h"
 
+#include "tags.h"
+
 #include "msg.h"
 #include "eth_ctrl.h"
+#include "manager.h"
 
 #if CONFIG_ETH_CTRL_USE_SPI_ETHERNET
   #include "driver/spi_master.h"
 #endif // CONFIG_ETH_CTRL_USE_SPI_ETHERNET
 
-static const char* TAG = "EWHC::COMPONENT:ETH";
+static const char* TAG = ETH_CTRL_TAG;
 
 
 #if CONFIG_ETH_CTRL_SPI_ETHERNETS_NUM
@@ -67,7 +70,7 @@ typedef struct {
 
 #if CONFIG_ETH_CTRL_USE_SPI_ETHERNET
   static bool gpio_isr_svc_init_by_eth = false; // indicates that we initialized the GPIO ISR service
-#endif // CONFIG_EXAMPLE_USE_SPI_ETHERNET
+#endif // CONFIG_ETH_CTRL_USE_SPI_ETHERNET
 
 static esp_eth_handle_t *eth_ctrl_handles = NULL;
 static uint8_t eth_ctrl_cnt = 0;
@@ -76,46 +79,69 @@ static uint8_t eth_ctrl_cnt = 0;
 static void eth_event_handler(void *arg, esp_event_base_t event_base,
                               int32_t event_id, void *event_data)
 {
-    uint8_t mac_addr[6] = {0};
-    /* we can get the ethernet driver handle from event data */
-    esp_eth_handle_t eth_handle = *(esp_eth_handle_t *)event_data;
+  uint8_t mac_addr[6] = {0};
+  /* we can get the ethernet driver handle from event data */
+  esp_eth_handle_t eth_handle = *(esp_eth_handle_t *)event_data;
+  msg_t msg = { .type = MSG_TYPE_ETH_EVENT, .from = MSG_CTRL_ETH, .to = MSG_CTRL_ALL };
+  bool send = true;
 
-    switch (event_id) {
-    case ETHERNET_EVENT_CONNECTED:
-        esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
-        ESP_LOGI(TAG, "Ethernet Link Up");
-        ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x",
-                 mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-        break;
-    case ETHERNET_EVENT_DISCONNECTED:
-        ESP_LOGI(TAG, "Ethernet Link Down");
-        break;
-    case ETHERNET_EVENT_START:
-        ESP_LOGI(TAG, "Ethernet Started");
-        break;
-    case ETHERNET_EVENT_STOP:
-        ESP_LOGI(TAG, "Ethernet Stopped");
-        break;
-    default:
-        break;
+  switch (event_id) {
+    case ETHERNET_EVENT_CONNECTED: {
+      esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
+      ESP_LOGI(TAG, "Ethernet Link Up");
+      ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x",
+                mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+      sprintf(msg.data.eth.event, "%s", "ETH CONNECTED");
+      break;
     }
+    case ETHERNET_EVENT_DISCONNECTED: {
+      ESP_LOGI(TAG, "Ethernet Link Down");
+      sprintf(msg.data.eth.event, "%s", "ETH DISCONNECTED");
+      break;
+    }
+    case ETHERNET_EVENT_START: {
+      ESP_LOGI(TAG, "Ethernet Started");
+      sprintf(msg.data.eth.event, "%s", "ETH STARTED");
+      break;
+    }
+    case ETHERNET_EVENT_STOP: {
+      ESP_LOGI(TAG, "Ethernet Stopped");
+      sprintf(msg.data.eth.event, "%s", "ETH STOPPED");
+      break;
+    }
+    default: {
+      send = false;
+      break;
+    }
+  }
+  if (send) {
+    esp_err_t result = MGR_Send(&msg);
+    ESP_LOGI(TAG, "MSG_Send() - result: %d", result);
+  }
 }
 
 /** Event handler for IP_EVENT_ETH_GOT_IP */
 static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
                                  int32_t event_id, void *event_data)
 {
-    ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
-    const esp_netif_ip_info_t *ip_info = &event->ip_info;
+  ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
+  const esp_netif_ip_info_t *ip_info = &event->ip_info;
+  msg_t msg = { .type = MSG_TYPE_ETH_IP, .from = MSG_CTRL_ETH, .to = MSG_CTRL_MGR };
 
-    ESP_LOGI(TAG, "Ethernet Got IP Address");
-    ESP_LOGI(TAG, "~~~~~~~~~~~");
-    ESP_LOGI(TAG, "ETHIP:" IPSTR, IP2STR(&ip_info->ip));
-    ESP_LOGI(TAG, "ETHMASK:" IPSTR, IP2STR(&ip_info->netmask));
-    ESP_LOGI(TAG, "ETHGW:" IPSTR, IP2STR(&ip_info->gw));
-    ESP_LOGI(TAG, "~~~~~~~~~~~");
+  sprintf(msg.data.eth.ip, IPSTR, IP2STR(&ip_info->ip));
+  sprintf(msg.data.eth.mask, IPSTR, IP2STR(&ip_info->netmask));
+  sprintf(msg.data.eth.gw, IPSTR, IP2STR(&ip_info->gw));
+
+  ESP_LOGI(TAG, "Ethernet Got IP Address");
+  ESP_LOGI(TAG, "~~~~~~~~~~~");
+  ESP_LOGI(TAG, "ETH IP: " IPSTR, IP2STR(&ip_info->ip));
+  ESP_LOGI(TAG, "ETH MASK: " IPSTR, IP2STR(&ip_info->netmask));
+  ESP_LOGI(TAG, "ETH GW: " IPSTR, IP2STR(&ip_info->gw));
+  ESP_LOGI(TAG, "~~~~~~~~~~~");
+
+  esp_err_t result = MGR_Send(&msg);
+  ESP_LOGI(TAG, "MSG_Send() - result: %d", result);
 }
-
 
 #ifdef CONFIG_ETH_CTRL_USE_INTERNAL_ETHERNET
 /**
@@ -404,6 +430,8 @@ esp_err_t ethctrl_Done(void) {
  */
 esp_err_t EthCtrl_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_ETH_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
   ethctrl_Init();

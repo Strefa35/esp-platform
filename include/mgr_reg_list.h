@@ -44,35 +44,35 @@ static mgr_reg_t mgr_reg_list[] = {
   /* ETH Controller MUST BE first element in mgr_reg_list */
 #ifdef CONFIG_ETH_CTRL_ENABLE
   {
-    "/cmd/eth",
+    MSG_CTRL_ETH,
     EthCtrl_Init, EthCtrl_Done, EthCtrl_Run, EthCtrl_Send
   },
 #endif
 
 #ifdef CONFIG_CLI_CTRL_ENABLE
   {
-    "/cmd/cli",
+    MSG_CTRL_CLI,
     NULL, NULL, NULL, NULL
   },
 #endif
 
 #ifdef CONFIG_GPIO_CTRL_ENABLE
   {
-    "/cmd/gpio",
+    MSG_CTRL_GPIO,
     NULL, NULL, NULL, NULL
   },
 #endif
 
 #ifdef CONFIG_POWER_CTRL_ENABLE
   {
-    "/cmd/power",
+    MSG_CTRL_POWER,
     NULL, NULL, NULL, NULL
   },
 #endif
 
 #ifdef CONFIG_TEMPLATE_CTRL_ENABLE
   {
-    "/cmd/template",
+    MSG_CTRL_TEMPLATE,
     TemplateCtrl_Init, TemplateCtrl_Done, TemplateCtrl_Run, TemplateCtrl_Send
   },
 #endif
@@ -80,7 +80,7 @@ static mgr_reg_t mgr_reg_list[] = {
 #ifdef CONFIG_MQTT_CTRL_ENABLE
   /* MQTT Controller MUST BE last element in mgr_reg_list */
   {
-    "/cmd/mqtt",
+    MSG_CTRL_MQTT,
     NULL, NULL, NULL, NULL
   },
 #endif

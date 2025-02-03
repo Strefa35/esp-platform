@@ -16,11 +16,13 @@
 
 #include "sdkconfig.h"
 
+#include "tags.h"
+
 #include "msg.h"
 #include "template_ctrl.h"
 
 
-static const char* TAG = "EWHC::COMPONENT:TEMPLATE";
+static const char* TAG = TEMPLATE_CTRL_TAG;
 
 /**
  * @brief Init Template controller

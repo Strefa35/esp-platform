@@ -1,5 +1,8 @@
 # build folder
 build
 
+# Old
+sdkconfig.old
+
 #Visual Studio Code folder
 .vscode

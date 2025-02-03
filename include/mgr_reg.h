@@ -29,7 +29,7 @@ typedef esp_err_t(*mgr_reg_run_f)(void);
 typedef esp_err_t(*mgr_reg_send_f)(const msg_t* msg);
 
 typedef struct mgr_reg_s {
-  mgr_reg_topic_t topic;
+  ctrl_type_e     type;
   mgr_reg_init_f  init_fn;
   mgr_reg_done_f  done_fn;
   mgr_reg_run_f   run_fn;
