@@ -165,7 +165,7 @@ static void mgr_TaskFn(void* param) {
       ESP_LOGD(TAG, "[%s] Message arrived: type: %d, from: %d, to: %d", __func__, msg.type, msg.from, msg.to);
 
       /* First, parse message in manager */
-      if (msg.to == MSG_CTRL_MGR) {
+      if ((msg.to == MSG_CTRL_ALL) || (msg.to == MSG_CTRL_MGR)) {
         mgr_ParseMsg(&msg);
       }
       /* Now, notify specific (or all) registered controller */
