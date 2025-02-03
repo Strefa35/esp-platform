@@ -82,7 +82,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
   uint8_t mac_addr[6] = {0};
   /* we can get the ethernet driver handle from event data */
   esp_eth_handle_t eth_handle = *(esp_eth_handle_t *)event_data;
-  msg_t msg = { .type = MSG_TYPE_ETH_EVENT, .from = MSG_CTRL_ETH, .to = MSG_CTRL_ALL };
+  msg_t msg = { .type = MSG_TYPE_ETH_EVENT, .from = MSG_ETH_CTRL, .to = MSG_ALL_CTRL };
   bool send = true;
 
   switch (event_id) {
@@ -126,7 +126,7 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
 {
   ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
   const esp_netif_ip_info_t *ip_info = &event->ip_info;
-  msg_t msg = { .type = MSG_TYPE_ETH_IP, .from = MSG_CTRL_ETH, .to = MSG_CTRL_MGR };
+  msg_t msg = { .type = MSG_TYPE_ETH_IP, .from = MSG_ETH_CTRL, .to = MSG_MGR_CTRL };
 
   sprintf(msg.data.eth.ip, IPSTR, IP2STR(&ip_info->ip));
   sprintf(msg.data.eth.mask, IPSTR, IP2STR(&ip_info->netmask));

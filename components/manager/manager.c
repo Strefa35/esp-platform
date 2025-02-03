@@ -45,7 +45,7 @@ static SemaphoreHandle_t  mgr_sem_id = NULL;
 static esp_err_t mgr_Init(int id) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(id: %d, type: %d)", __func__, id, mgr_reg_list[id].type);
+  ESP_LOGI(TAG, "++%s(id: %d, type: 0x%08lx)", __func__, id, mgr_reg_list[id].type);
   if (mgr_reg_list[id].init_fn) {
     result = mgr_reg_list[id].init_fn();
   }
@@ -56,7 +56,7 @@ static esp_err_t mgr_Init(int id) {
 static esp_err_t mgr_Run(int id) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(id: %d, type: %d)", __func__, id, mgr_reg_list[id].type);
+  ESP_LOGI(TAG, "++%s(id: %d, type: 0x%08lx)", __func__, id, mgr_reg_list[id].type);
   if (mgr_reg_list[id].run_fn) {
     result = mgr_reg_list[id].run_fn();
   }
@@ -67,7 +67,7 @@ static esp_err_t mgr_Run(int id) {
 static esp_err_t mgr_Done(int id) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(id: %d, type: %d)", __func__, id, mgr_reg_list[id].type);
+  ESP_LOGI(TAG, "++%s(id: %d, type: 0x%08lx)", __func__, id, mgr_reg_list[id].type);
   if (mgr_reg_list[id].done_fn) {
     result = mgr_reg_list[id].done_fn();
   }
@@ -78,7 +78,7 @@ static esp_err_t mgr_Done(int id) {
 static esp_err_t mgr_ParseEthMsg(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: %d, to: %d)", __func__, msg->type, msg->from, msg->to);
+  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
   switch (msg->type) {
     case MSG_TYPE_ETH_EVENT: {
       ESP_LOGD(TAG, "[%s] Event: %s", __func__, msg->data.eth.event);
@@ -102,22 +102,22 @@ static esp_err_t mgr_ParseEthMsg(const msg_t* msg) {
 static esp_err_t mgr_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_FAIL;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: %d, to: %d)", __func__, msg->type, msg->from, msg->to);
+  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
   switch (msg->from) {
-    case MSG_CTRL_ETH: {
+    case MSG_ETH_CTRL: {
       result = mgr_ParseEthMsg(msg);
       break;
     }
-    case MSG_CTRL_CLI: {
+    case MSG_CLI_CTRL: {
       break;
     }
-    case MSG_CTRL_GPIO: {
+    case MSG_GPIO_CTRL: {
       break;
     }
-    case MSG_CTRL_POWER: {
+    case MSG_POWER_CTRL: {
       break;
     }
-    case MSG_CTRL_MQTT: {
+    case MSG_MQTT_CTRL: {
       break;
     }
     default: {
@@ -131,15 +131,11 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
 static esp_err_t mgr_NotifyCtrl(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: %d, to: %d)", __func__, msg->type, msg->from, msg->to);
+  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-    if ((msg->to == MSG_CTRL_ALL) || (mgr_reg_list[idx].type == msg->to)) {
+    if (msg->to & mgr_reg_list[idx].type) {
       if (mgr_reg_list[idx].send_fn) {
         result = mgr_reg_list[idx].send_fn(msg);
-        /* if ONLY specific Ctrl, finish it */
-        if (msg->to != MSG_CTRL_ALL) {
-          break;
-        }
       }
     }
   }
@@ -162,10 +158,10 @@ static void mgr_TaskFn(void* param) {
   while (loop) {
     ESP_LOGD(TAG, "[%s] Wait...", __func__);
     if(xQueueReceive(mgr_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
-      ESP_LOGD(TAG, "[%s] Message arrived: type: %d, from: %d, to: %d", __func__, msg.type, msg.from, msg.to);
+      ESP_LOGD(TAG, "[%s] Message arrived: type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg.type, msg.from, msg.to);
 
       /* First, parse message in manager */
-      if ((msg.to == MSG_CTRL_ALL) || (msg.to == MSG_CTRL_MGR)) {
+      if (msg.to & MSG_MGR_CTRL) {
         mgr_ParseMsg(&msg);
       }
       /* Now, notify specific (or all) registered controller */
@@ -278,7 +274,7 @@ esp_err_t MGR_Send(const msg_t* msg) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
   if (xQueueSend(mgr_msg_queue, msg, (TickType_t) 0) != pdPASS) {
-    ESP_LOGE(TAG, "[%s] Message error. type: %d, from: %d, to: %d", __func__, msg->type, msg->from, msg->to);
+    ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg->type, msg->from, msg->to);
     result = ESP_FAIL;
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);

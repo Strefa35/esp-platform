@@ -27,18 +27,17 @@ typedef enum {
 
 } msg_type_e;
 
-typedef enum {
-  MSG_CTRL_ALL,
-  MSG_CTRL_MGR,
-  MSG_CTRL_ETH,
-  MSG_CTRL_CLI,
-  MSG_CTRL_GPIO,
-  MSG_CTRL_POWER,
-  MSG_CTRL_MQTT,
-
-  MSG_CTRL_TEMPLATE,
-
-} ctrl_type_e;
+/* ----------[ALL bits]----------- */
+#define MSG_ALL_CTRL    (~0)
+/* ----------[4 bits]------------- */
+#define MSG_MGR_CTRL    (1 << 0)
+#define MSG_ETH_CTRL    (1 << 1)
+#define MSG_CLI_CTRL    (1 << 2)
+#define MSG_GPIO_CTRL   (1 << 3)
+/* ----------[4 bits]------------- */
+#define MSG_POWER_CTRL  (1 << 4)
+#define MSG_MQTT_CTRL   (1 << 5)
+/* ----------[END]---------------- */
 
 typedef struct {
 
@@ -77,8 +76,8 @@ typedef struct {
  */
 typedef struct {
   msg_type_e      type;
-  ctrl_type_e     from;
-  ctrl_type_e     to;
+  uint32_t        from;
+  uint32_t        to;
   union {
     data_mgr_t    mgr;
     data_eth_t    eth;
