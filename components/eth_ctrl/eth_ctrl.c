@@ -322,7 +322,6 @@ static esp_err_t ethctrl_DeInitEthernet(esp_eth_handle_t *eth_ctrl_handles, uint
 
 static esp_err_t ethctrl_Init(void) {
   uint8_t eth_port_cnt = 0;
-  esp_eth_handle_t *eth_ctrl_handles;
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
