@@ -377,11 +377,6 @@ static esp_err_t ethctrl_Init(void) {
   ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL));
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &got_ip_event_handler, NULL));
 
-  // Start Ethernet driver state machine
-  for (int i = 0; i < eth_ctrl_cnt; i++) {
-    ESP_ERROR_CHECK(esp_eth_start(eth_ctrl_handles[i]));
-  }
-
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -423,6 +418,19 @@ esp_err_t ethctrl_Done(void) {
   return result;
 }
 
+static esp_err_t ethctrl_Run(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  // Start Ethernet driver state machine
+  for (int i = 0; i < eth_ctrl_cnt; i++) {
+    ESP_ERROR_CHECK(esp_eth_start(eth_ctrl_handles[i]));
+  }
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
 
 /**
  * @brief Init Eth controller
@@ -435,7 +443,7 @@ esp_err_t EthCtrl_Init(void) {
   esp_log_level_set(TAG, CONFIG_ETH_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  ethctrl_Init();
+  result = ethctrl_Init();
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -449,7 +457,7 @@ esp_err_t EthCtrl_Done(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  ethctrl_Done();
+  result = ethctrl_Done();
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -463,7 +471,7 @@ esp_err_t EthCtrl_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  
+  result = ethctrl_Run();
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
