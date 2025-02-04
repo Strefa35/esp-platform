@@ -222,6 +222,9 @@ err:
 
 static esp_err_t ethctrl_InitEthernet(esp_eth_handle_t *eth_handles_out[], uint8_t *eth_cnt_out)
 {
+  esp_eth_handle_t *eth_handles = NULL;
+  uint8_t eth_cnt = 0;
+
   esp_err_t ret = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
@@ -229,13 +232,13 @@ static esp_err_t ethctrl_InitEthernet(esp_eth_handle_t *eth_handles_out[], uint8
 #if CONFIG_ETH_CTRL_USE_INTERNAL_ETHERNET || CONFIG_ETH_CTRL_USE_SPI_ETHERNET
   ESP_GOTO_ON_FALSE(eth_handles_out != NULL && eth_cnt_out != NULL, ESP_ERR_INVALID_ARG,
                       err, TAG, "invalid arguments: initialized handles array or number of interfaces");
-  eth_ctrl_handles = calloc(SPI_ETHERNETS_NUM + INTERNAL_ETHERNETS_NUM, sizeof(esp_eth_handle_t));
-  ESP_GOTO_ON_FALSE(eth_ctrl_handles != NULL, ESP_ERR_NO_MEM, err, TAG, "No memory");
+  eth_handles = calloc(SPI_ETHERNETS_NUM + INTERNAL_ETHERNETS_NUM, sizeof(esp_eth_handle_t));
+  ESP_GOTO_ON_FALSE(eth_handles != NULL, ESP_ERR_NO_MEM, err, TAG, "No memory");
 
   #if CONFIG_ETH_CTRL_USE_INTERNAL_ETHERNET
-    eth_ctrl_handles[eth_ctrl_cnt] = ethctrl_InitInternal(NULL, NULL);
-    ESP_GOTO_ON_FALSE(eth_ctrl_handles[eth_ctrl_cnt], ESP_FAIL, err, TAG, "Internal Ethernet init failed");
-    eth_ctrl_cnt++;
+    eth_handles[eth_cnt] = ethctrl_InitInternal(NULL, NULL);
+    ESP_GOTO_ON_FALSE(eth_handles[eth_cnt], ESP_FAIL, err, TAG, "Internal Ethernet init failed");
+    eth_cnt++;
   #endif //CONFIG_ETH_CTRL_USE_INTERNAL_ETHERNET
 
   #if CONFIG_ETH_CTRL_USE_SPI_ETHERNET
@@ -265,9 +268,9 @@ static esp_err_t ethctrl_InitEthernet(esp_eth_handle_t *eth_handles_out[], uint8
     #endif
 
     for (int i = 0; i < CONFIG_ETH_CTRL_SPI_ETHERNETS_NUM; i++) {
-        eth_ctrl_handles[eth_ctrl_cnt] = ethctrl_InitSpi(&spi_eth_module_config[i], NULL, NULL);
-        ESP_GOTO_ON_FALSE(eth_ctrl_handles[eth_ctrl_cnt], ESP_FAIL, err, TAG, "SPI Ethernet init failed");
-        eth_ctrl_cnt++;
+        eth_handles[eth_cnt] = ethctrl_InitSpi(&spi_eth_module_config[i], NULL, NULL);
+        ESP_GOTO_ON_FALSE(eth_handles[eth_cnt], ESP_FAIL, err, TAG, "SPI Ethernet init failed");
+        eth_cnt++;
     }
   #endif // CONFIG_ETH_CTRL_USE_SPI_ETHERNET
 
@@ -275,28 +278,28 @@ static esp_err_t ethctrl_InitEthernet(esp_eth_handle_t *eth_handles_out[], uint8
     ESP_LOGD(TAG, "No Ethernet device selected to init");
 #endif // CONFIG_ETH_CTRL_USE_INTERNAL_ETHERNET || CONFIG_ETH_CTRL_USE_SPI_ETHERNET
 
-    *eth_handles_out = eth_ctrl_handles;
-    *eth_cnt_out = eth_ctrl_cnt;
+    *eth_handles_out = eth_handles;
+    *eth_cnt_out = eth_cnt;
 
     return ret;
 #if CONFIG_ETH_CTRL_USE_INTERNAL_ETHERNET || CONFIG_ETH_CTRL_USE_SPI_ETHERNET
 err:
-    free(eth_ctrl_handles);
+    free(eth_handles);
     ESP_LOGI(TAG, "--%s() - result: %d", __func__, ret);
     return ret;
 #endif
 }
 
-static esp_err_t ethctrl_DeInitEthernet(esp_eth_handle_t *eth_ctrl_handles, uint8_t eth_ctrl_cnt)
+static esp_err_t ethctrl_DeInitEthernet(esp_eth_handle_t *eth_handles, uint8_t eth_cnt)
 {
-    ESP_RETURN_ON_FALSE(eth_ctrl_handles != NULL, ESP_ERR_INVALID_ARG, TAG, "array of Ethernet handles cannot be NULL");
-    for (int i = 0; i < eth_ctrl_cnt; i++) {
+    ESP_RETURN_ON_FALSE(eth_handles != NULL, ESP_ERR_INVALID_ARG, TAG, "array of Ethernet handles cannot be NULL");
+    for (int i = 0; i < eth_cnt; i++) {
         esp_eth_mac_t *mac = NULL;
         esp_eth_phy_t *phy = NULL;
-        if (eth_ctrl_handles[i] != NULL) {
-            esp_eth_get_mac_instance(eth_ctrl_handles[i], &mac);
-            esp_eth_get_phy_instance(eth_ctrl_handles[i], &phy);
-            ESP_RETURN_ON_ERROR(esp_eth_driver_uninstall(eth_ctrl_handles[i]), TAG, "Ethernet %p uninstall failed", eth_ctrl_handles[i]);
+        if (eth_handles[i] != NULL) {
+            esp_eth_get_mac_instance(eth_handles[i], &mac);
+            esp_eth_get_phy_instance(eth_handles[i], &phy);
+            ESP_RETURN_ON_ERROR(esp_eth_driver_uninstall(eth_handles[i]), TAG, "Ethernet %p uninstall failed", eth_handles[i]);
         }
         if (mac != NULL) {
             mac->del(mac);
@@ -316,21 +319,20 @@ static esp_err_t ethctrl_DeInitEthernet(esp_eth_handle_t *eth_ctrl_handles, uint
     }
 #endif
 #endif //CONFIG_ETH_CTRL_USE_SPI_ETHERNET
-    free(eth_ctrl_handles);
+    free(eth_handles);
     return ESP_OK;
 }
 
 static esp_err_t ethctrl_Init(void) {
-  uint8_t eth_port_cnt = 0;
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
   // Initialize Ethernet driver
-  ESP_ERROR_CHECK(ethctrl_InitEthernet(&eth_ctrl_handles, &eth_port_cnt));
+  ESP_ERROR_CHECK(ethctrl_InitEthernet(&eth_ctrl_handles, &eth_ctrl_cnt));
 
-  esp_netif_t *eth_netifs[eth_port_cnt];
-  esp_eth_netif_glue_handle_t eth_netif_glues[eth_port_cnt];
+  esp_netif_t *eth_netifs[eth_ctrl_cnt];
+  esp_eth_netif_glue_handle_t eth_netif_glues[eth_ctrl_cnt];
 
   // Initialize TCP/IP network interface aka the esp-netif (should be called only once in application)
   ESP_ERROR_CHECK(esp_netif_init());
@@ -338,7 +340,7 @@ static esp_err_t ethctrl_Init(void) {
   ESP_ERROR_CHECK(esp_event_loop_create_default());
 
   // Create instance(s) of esp-netif for Ethernet(s)
-  if (eth_port_cnt == 1) {
+  if (eth_ctrl_cnt == 1) {
     // Use ESP_NETIF_DEFAULT_ETH when just one Ethernet interface is used and you don't need to modify
     // default esp-netif configuration parameters.
     esp_netif_config_t cfg = ESP_NETIF_DEFAULT_ETH();
@@ -357,7 +359,7 @@ static esp_err_t ethctrl_Init(void) {
     char if_key_str[10];
     char if_desc_str[10];
     char num_str[3];
-    for (int i = 0; i < eth_port_cnt; i++) {
+    for (int i = 0; i < eth_ctrl_cnt; i++) {
       itoa(i, num_str, 10);
       strcat(strcpy(if_key_str, "ETH_"), num_str);
       strcat(strcpy(if_desc_str, "eth"), num_str);
@@ -376,7 +378,7 @@ static esp_err_t ethctrl_Init(void) {
   ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &got_ip_event_handler, NULL));
 
   // Start Ethernet driver state machine
-  for (int i = 0; i < eth_port_cnt; i++) {
+  for (int i = 0; i < eth_ctrl_cnt; i++) {
     ESP_ERROR_CHECK(esp_eth_start(eth_ctrl_handles[i]));
   }
 
