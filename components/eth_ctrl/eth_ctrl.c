@@ -1,5 +1,5 @@
 /**
- * @file eth.c
+ * @file eth_ctrl.c
  * @author A.Czerwinski@pistacje.net
  * @brief Ethernet Controller
  * @version 0.1
@@ -28,7 +28,7 @@
 
 #include "msg.h"
 #include "eth_ctrl.h"
-#include "manager.h"
+#include "mgr_ctrl.h"
 
 #if CONFIG_ETH_CTRL_USE_SPI_ETHERNET
   #include "driver/spi_master.h"
@@ -81,7 +81,7 @@ static void eth_event_handler(void *arg, esp_event_base_t event_base,
 {
   uint8_t mac_addr[6] = {0};
   /* we can get the ethernet driver handle from event data */
-  esp_eth_handle_t eth_handle = *(esp_eth_handle_t *)event_data;
+  esp_eth_handle_t eth_handle = *(esp_eth_handle_t *) event_data;
   msg_t msg = { .type = MSG_TYPE_ETH_EVENT, .from = MSG_ETH_CTRL, .to = MSG_ALL_CTRL };
   bool send = true;
 

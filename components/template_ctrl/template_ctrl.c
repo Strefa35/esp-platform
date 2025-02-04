@@ -1,5 +1,5 @@
 /**
- * @file eth.c
+ * @file template_ctrl.c
  * @author A.Czerwinski@pistacje.net
  * @brief Template Controller
  * @version 0.1

@@ -1,7 +1,7 @@
 /**
- * @file manager.h
+ * @file mgr_ctrl.h
  * @author A.Czerwinski@pistacje.net
- * @brief 
+ * @brief Manager Controller
  * @version 0.1
  * @date 2025-01-28
  * 

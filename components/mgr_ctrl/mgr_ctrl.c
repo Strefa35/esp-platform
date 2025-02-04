@@ -1,7 +1,7 @@
 /**
- * @file manager.c
+ * @file mgr_ctrl.c
  * @author A.Czerwinski@pistacje.net
- * @brief Manager module
+ * @brief Manager Controller
  * @version 0.1
  * @date 2025-01-28
  * 
@@ -19,7 +19,7 @@
 
 #include "tags.h"
 
-#include "manager.h"
+#include "mgr_ctrl.h"
 #include "mgr_reg.h"
 
 #include "mgr_reg_list.h"
@@ -222,27 +222,6 @@ esp_err_t MGR_Init(void) {
 }
 
 /**
- * @brief Run manager
- * 
- * \return esp_err_t 
- */
-esp_err_t MGR_Run(void) {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s()", __func__);
-  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-    result = mgr_Run(idx);
-  }
-  if (mgr_sem_id) {
-    ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake...", __func__);
-    xSemaphoreTake(mgr_sem_id, portMAX_DELAY);
-    ESP_LOGD(TAG, "[%s] xSemaphoreTake was released.", __func__);
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
-/**
  * @brief Done manager
  * 
  * \return esp_err_t 
@@ -264,6 +243,27 @@ esp_err_t MGR_Done(void) {
   if (mgr_msg_queue) {
     vQueueDelete(mgr_msg_queue);
     ESP_LOGD(TAG, "[%s] Queue deleted", __func__);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief Run manager
+ * 
+ * \return esp_err_t 
+ */
+esp_err_t MGR_Run(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+    result = mgr_Run(idx);
+  }
+  if (mgr_sem_id) {
+    ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake...", __func__);
+    xSemaphoreTake(mgr_sem_id, portMAX_DELAY);
+    ESP_LOGD(TAG, "[%s] xSemaphoreTake was released.", __func__);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;

@@ -12,7 +12,7 @@
 
 #include "tags.h"
 
-#include "manager.h"
+#include "mgr_ctrl.h"
 
 
 static const char* TAG = MAIN_TAG;

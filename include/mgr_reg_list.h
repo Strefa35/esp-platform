@@ -34,7 +34,7 @@
 #endif
 
 #ifdef CONFIG_MQTT_CTRL_ENABLE
-
+  #include "mqtt_ctrl.h"
 #endif
 
 
@@ -81,7 +81,7 @@ static mgr_reg_t mgr_reg_list[] = {
   /* MQTT Controller MUST BE last element in mgr_reg_list */
   {
     MSG_MQTT_CTRL,
-    NULL, NULL, NULL, NULL
+    MqttCtrl_Init, MqttCtrl_Done, MqttCtrl_Run, MqttCtrl_Send
   },
 #endif
 };

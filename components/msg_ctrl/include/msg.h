@@ -25,6 +25,9 @@ typedef enum {
   MSG_TYPE_ETH_EVENT,
   MSG_TYPE_ETH_IP,
 
+  MSG_TYPE_MQTT_EVENT,
+  MSG_TYPE_MQTT_DATA,
+
 } msg_type_e;
 
 /* ----------[ALL bits]----------- */
@@ -66,6 +69,7 @@ typedef struct {
 } data_power_t;
 
 typedef struct {
+  int32_t       event_id;
   data_topic_t  topic;
   data_msg_t    msg;
 } data_mqtt_t;

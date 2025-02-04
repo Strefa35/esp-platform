@@ -1,5 +1,0 @@
-idf_component_register(
-  SRCS "manager.c"
-  INCLUDE_DIRS "include" "../../include" "../eth/include" "../template/include"
-  REQUIRES eth template
-)

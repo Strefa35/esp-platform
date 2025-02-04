@@ -1,7 +1,7 @@
 /**
  * @file eth_ctrl.h
  * @author A.Czerwinski@pistacje.net
- * @brief Eth Controller
+ * @brief Ethernet Controller
  * @version 0.1
  * @date 2025-01-31
  * 
