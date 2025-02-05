@@ -24,6 +24,8 @@
 
 #include "mgr_reg_list.h"
 
+#include "lut.h"
+
 
 #define MGR_MSG_MAX           20
 
@@ -75,21 +77,36 @@ static esp_err_t mgr_Done(int id) {
   return result;
 }
 
-static esp_err_t mgr_ParseEthMsg(const msg_t* msg) {
+static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t* payload) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
-  switch (msg->type) {
+  ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
+  switch (type) {
     case MSG_TYPE_ETH_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %s", __func__, msg->data.eth.event);
+      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, payload->u.event.id, GET_ETH_EVENT_NAME(payload->u.event.id));
       break;
     }
+
     case MSG_TYPE_ETH_IP: {
-      ESP_LOGD(TAG, "[%s]   IP: %s", __func__, msg->data.eth.ip);
-      ESP_LOGD(TAG, "[%s] MASK: %s", __func__, msg->data.eth.mask);
-      ESP_LOGD(TAG, "[%s]   GW: %s", __func__, msg->data.eth.gw);
+      uint8_t* addr = NULL;
+
+      addr = (uint8_t*) &(payload->u.ip_info.ip);
+      ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
+
+      addr = (uint8_t*) &(payload->u.ip_info.mask);
+      ESP_LOGD(TAG, "[%s] MASK: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
+
+      addr = (uint8_t*) &(payload->u.ip_info.gw);
+      ESP_LOGD(TAG, "[%s]   GW: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
       break;
     }
+
     default: {
       result = ESP_FAIL;
       break;
@@ -105,7 +122,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
   ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
   switch (msg->from) {
     case MSG_ETH_CTRL: {
-      result = mgr_ParseEthMsg(msg);
+      result = mgr_ParseEthPayload(msg->type, &(msg->payload.eth));
       break;
     }
     case MSG_CLI_CTRL: {

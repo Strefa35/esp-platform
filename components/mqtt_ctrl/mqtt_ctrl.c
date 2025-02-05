@@ -24,6 +24,8 @@
 #include "msg.h"
 #include "mqtt_ctrl.h"
 
+#include "lut.h"
+
 
 #define MQTT_MSG_MAX           20
 
@@ -43,10 +45,16 @@ static esp_mqtt_client_handle_t mqtt_client = NULL;
 
 static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
   esp_mqtt_event_handle_t event = event_data;
-  msg_t msg = { .type = MSG_TYPE_MQTT_EVENT, .from = MSG_MQTT_CTRL, .to = MSG_ALL_CTRL, .data.mqtt.event_id = event->event_id };
+  msg_t msg = { 
+    .type = MSG_TYPE_MQTT_EVENT, 
+    .from = MSG_MQTT_CTRL, 
+    .to = MSG_ALL_CTRL, 
+    .payload.mqtt.event_id = event->event_id 
+  };
   bool send = true;
 
   ESP_LOGI(TAG, "++%s(handler_args: %p, base: %s, event_id: %ld, event_data: %p)", __func__, handler_args, base ? base : "-", event_id, event_data);
+  ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, event->event_id, GET_MQTT_EVENT_NAME(event->event_id));
 
   switch (event->event_id) {
     case MQTT_EVENT_CONNECTED: {
@@ -93,13 +101,13 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
-static esp_err_t mqtt_InitClient(void) {
+static esp_err_t mqttctrl_InitClient(void) {
   esp_mqtt_client_config_t mqtt_cfg = {
     .broker.address.uri = CONFIG_BROKER_URL,
     .session.protocol_ver = MQTT_PROTOCOL_V_5,
     .network.disable_auto_reconnect = true,
-    .credentials.username = "123",
-    .credentials.authentication.password = "456",
+    // .credentials.username = "123",
+    // .credentials.authentication.password = "456",
     .session.last_will.topic = "/topic/will",
     .session.last_will.msg = "i will leave",
     .session.last_will.msg_len = 12,
@@ -111,23 +119,25 @@ static esp_err_t mqtt_InitClient(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
   mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
   if (mqtt_client) {
-    esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqttctrl_EventHandler, NULL);
-    esp_mqtt_client_start(mqtt_client);
+    result = esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqttctrl_EventHandler, NULL);
   } else {
-    ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);
+    ESP_LOGE(TAG, "[%s] esp_mqtt_client_init() failed", __func__);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
-static esp_err_t mqtt_DoneClient(void) {
-  esp_err_t result = ESP_OK;
+static esp_err_t mqttctrl_DoneClient(void) {
+  esp_err_t result = ESP_FAIL;
 
   ESP_LOGI(TAG, "++%s()", __func__);
   if (mqtt_client) {
-    esp_mqtt_client_unregister_event(mqtt_client, ESP_EVENT_ANY_ID, mqttctrl_EventHandler);
-    esp_mqtt_client_stop(mqtt_client);
-    esp_mqtt_client_destroy(mqtt_client);
+    result = esp_mqtt_client_unregister_event(mqtt_client, ESP_EVENT_ANY_ID, mqttctrl_EventHandler);
+    ESP_LOGD(TAG, "[%s] esp_mqtt_client_unregister_event() - result: %d", __func__, result);
+    result = esp_mqtt_client_stop(mqtt_client);
+    ESP_LOGD(TAG, "[%s] esp_mqtt_client_stop() - result: %d", __func__, result);
+    result = esp_mqtt_client_destroy(mqtt_client);
+    ESP_LOGD(TAG, "[%s] esp_mqtt_client_destroy() - result: %d", __func__, result);
   } else {
     ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);
   }
@@ -135,19 +145,64 @@ static esp_err_t mqtt_DoneClient(void) {
   return result;
 }
 
-static esp_err_t mqtt_ParseEthMsg(const msg_t* msg) {
+static esp_err_t mqttctrl_StartClient(void) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (mqtt_client) {
+    result = esp_mqtt_client_start(mqtt_client);
+  } else {
+    ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_StopClient(void) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (mqtt_client) {
+    result = esp_mqtt_client_stop(mqtt_client);
+  } else {
+    ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_ParseEthPayload(const msg_type_e type, const payload_eth_t* payload) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
-  switch (msg->type) {
+  ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
+  switch (type) {
     case MSG_TYPE_ETH_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %s", __func__, msg->data.eth.event);
+      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, payload->u.event.id, GET_ETH_EVENT_NAME(payload->u.event.id));
       break;
     }
+
     case MSG_TYPE_ETH_IP: {
-      ESP_LOGD(TAG, "[%s]   IP: %s", __func__, msg->data.eth.ip);
-      ESP_LOGD(TAG, "[%s] MASK: %s", __func__, msg->data.eth.mask);
-      ESP_LOGD(TAG, "[%s]   GW: %s", __func__, msg->data.eth.gw);
+      uint8_t* addr = NULL;
+
+      addr = (uint8_t*) &(payload->u.ip_info.ip);
+      ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
+
+      addr = (uint8_t*) &(payload->u.ip_info.mask);
+      ESP_LOGD(TAG, "[%s] MASK: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
+
+      addr = (uint8_t*) &(payload->u.ip_info.gw);
+      ESP_LOGD(TAG, "[%s]   GW: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
+
+      result = mqttctrl_StartClient();
+      if (result != ESP_OK) {
+        ESP_LOGE(TAG, "[%s] mqttctrl_StartClient() - result: %d", __func__, result);
+      }
       break;
     }
     default: {
@@ -159,13 +214,17 @@ static esp_err_t mqtt_ParseEthMsg(const msg_t* msg) {
   return result;
 }
 
-static esp_err_t mqtt_ParseMqttMsg(const msg_t* msg) {
+static esp_err_t mqttctrl_ParseMqttPayload(const msg_type_e type, const payload_mqtt_t* payload) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
-  switch (msg->type) {
+  ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
+  switch (type) {
     case MSG_TYPE_MQTT_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %ld", __func__, msg->data.mqtt.event_id);
+      ESP_LOGD(TAG, "[%s] Event: %ld", __func__, payload->event_id);
+      break;
+    }
+    case MSG_TYPE_MQTT_DATA: {
+      ESP_LOGD(TAG, "[%s] Data", __func__);
       break;
     }
     default: {
@@ -177,13 +236,13 @@ static esp_err_t mqtt_ParseMqttMsg(const msg_t* msg) {
   return result;
 }
 
-static esp_err_t mqtt_ParseMsg(const msg_t* msg) {
+static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_FAIL;
 
   ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
   switch (msg->from) {
     case MSG_ETH_CTRL: {
-      result = mqtt_ParseEthMsg(msg);
+      result = mqttctrl_ParseEthPayload(msg->type, &(msg->payload.eth));
       break;
     }
     case MSG_CLI_CTRL: {
@@ -196,7 +255,7 @@ static esp_err_t mqtt_ParseMsg(const msg_t* msg) {
       break;
     }
     case MSG_MQTT_CTRL: {
-      result = mqtt_ParseMqttMsg(msg);
+      result = mqttctrl_ParseMqttPayload(msg->type, &(msg->payload.mqtt));
       break;
     }
     default: {
@@ -212,7 +271,7 @@ static esp_err_t mqtt_ParseMsg(const msg_t* msg) {
  * 
  * @param param 
  */
-static void mqtt_TaskFn(void* param) {
+static void mqttctrl_TaskFn(void* param) {
   msg_t msg;
   bool loop = true;
   esp_err_t result;
@@ -224,7 +283,7 @@ static void mqtt_TaskFn(void* param) {
     if(xQueueReceive(mqtt_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
       ESP_LOGD(TAG, "[%s] Message arrived: type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg.type, msg.from, msg.to);
       
-      result = mqtt_ParseMsg(&msg);
+      result = mqttctrl_ParseMsg(&msg);
       if (result != ESP_OK) {
         // TODO - Send Error to the Broker
         ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);
@@ -250,17 +309,10 @@ esp_err_t mqttctrl_Init(void) {
   }
 
   /* Initialization manager thread */
-  xTaskCreate(mqtt_TaskFn, MQTT_TASK_NAME, MQTT_TASK_STACK_SIZE, NULL, MQTT_TASK_PRIORITY, &mqtt_task_id);
+  xTaskCreate(mqttctrl_TaskFn, MQTT_TASK_NAME, MQTT_TASK_STACK_SIZE, NULL, MQTT_TASK_PRIORITY, &mqtt_task_id);
   if (mqtt_task_id == NULL)
   {
     ESP_LOGE(TAG, "[%s] xTaskCreate() failed.", __func__);
-    return ESP_FAIL;
-  }
-
-  result = mqtt_InitClient();
-  if (result != ESP_OK)
-  {
-    ESP_LOGE(TAG, "[%s] mqtt_InitClient() - result: %d", __func__, result);
     return ESP_FAIL;
   }
 
@@ -272,7 +324,7 @@ esp_err_t mqttctrl_Done(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  result = mqtt_DoneClient();
+  result = mqttctrl_DoneClient();
   if (mqtt_task_id) {
     ESP_LOGD(TAG, "[%s] Task stopped", __func__);
   }
@@ -288,7 +340,11 @@ esp_err_t mqttctrl_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-
+  result = mqttctrl_InitClient();
+  if (result != ESP_OK)
+  {
+    ESP_LOGE(TAG, "[%s] mqttctrl_InitClient() - result: %d", __func__, result);
+  }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
