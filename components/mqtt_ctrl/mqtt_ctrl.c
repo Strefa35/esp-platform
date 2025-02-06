@@ -35,6 +35,7 @@
 
 #define CONFIG_BROKER_URL     "mqtt://10.0.0.10"
 
+#define GET_ETH_MAC(_mac)     _mac[0], _mac[1], _mac[2], _mac[3], _mac[4], _mac[5]
 
 static const char* TAG = MQTT_CTRL_TAG;
 
@@ -42,6 +43,10 @@ static QueueHandle_t      mqtt_msg_queue = NULL;
 static TaskHandle_t       mqtt_task_id = NULL;
 
 static esp_mqtt_client_handle_t mqtt_client = NULL;
+
+static uint8_t  mqtt_eth_mac[6] = {0};
+static char     mqtt_uid[32];
+static char     mqtt_uid_pattern[] = "ESP_%02X%02X%02X";
 
 static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
   esp_mqtt_event_handle_t event = event_data;
@@ -59,6 +64,7 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
   switch (event->event_id) {
     case MQTT_EVENT_CONNECTED: {
       ESP_LOGD(TAG, "[%s] MQTT_EVENT_CONNECTED", __func__);
+
       break;
     }
     case MQTT_EVENT_DISCONNECTED: {
@@ -178,6 +184,15 @@ static esp_err_t mqttctrl_ParseEthPayload(const msg_type_e type, const payload_e
   switch (type) {
     case MSG_TYPE_ETH_EVENT: {
       ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, payload->u.event.id, GET_ETH_EVENT_NAME(payload->u.event.id));
+      if (payload->u.event.id == ETH_EVENT_CONNECTED) {
+        /* MAC address */
+        ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(payload->u.event.mac));
+
+        /* Create UID */
+        memcpy(mqtt_eth_mac, payload->u.event.mac, sizeof(payload->u.event.mac));
+        memset(mqtt_uid, 0x00, sizeof(mqtt_uid));
+        sprintf(mqtt_uid, mqtt_uid_pattern, mqtt_eth_mac[3], mqtt_eth_mac[4], mqtt_eth_mac[5]);
+      }
       break;
     }
 
@@ -214,13 +229,43 @@ static esp_err_t mqttctrl_ParseEthPayload(const msg_type_e type, const payload_e
   return result;
 }
 
+static esp_err_t mqttctrl_ParseMqttEvent(const esp_mqtt_event_id_t event_id) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(event_id: %d [%s])", __func__, event_id, GET_MQTT_EVENT_NAME(event_id));
+  switch (event_id) {
+    case MQTT_EVENT_CONNECTED: {
+
+      ESP_LOGD(TAG, "[%s] UID: %s", __func__, mqtt_uid);
+      
+      /* Notify MQTT Broker about client connected */
+      int msg_id = esp_mqtt_client_publish(mqtt_client, "/event/register", mqtt_uid, 0, 1, 0);
+      ESP_LOGD(TAG, "[%s] Sent publish successful, msg_id: %d", __func__, msg_id);
+
+      /* Subscribe list of topics */
+      msg_id = esp_mqtt_client_subscribe(mqtt_client, mqtt_uid, 0);
+      ESP_LOGD(TAG, "[%s] Sent subscribe successful, msg_id: %d", __func__, msg_id);
+
+      break;
+    }
+    default: {
+      result = ESP_FAIL;
+      break;
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t mqttctrl_ParseMqttPayload(const msg_type_e type, const payload_mqtt_t* payload) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
   switch (type) {
     case MSG_TYPE_MQTT_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %ld", __func__, payload->event_id);
+      ESP_LOGD(TAG, "[%s] Event: %ld [%s]", __func__, payload->event_id, GET_MQTT_EVENT_NAME(payload->event_id));
+
+      result = mqttctrl_ParseMqttEvent(payload->event_id);
       break;
     }
     case MSG_TYPE_MQTT_DATA: {
@@ -316,6 +361,12 @@ esp_err_t mqttctrl_Init(void) {
     return ESP_FAIL;
   }
 
+  result = mqttctrl_InitClient();
+  if (result != ESP_OK)
+  {
+    ESP_LOGE(TAG, "[%s] mqttctrl_InitClient() - result: %d", __func__, result);
+  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -340,11 +391,7 @@ esp_err_t mqttctrl_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  result = mqttctrl_InitClient();
-  if (result != ESP_OK)
-  {
-    ESP_LOGE(TAG, "[%s] mqttctrl_InitClient() - result: %d", __func__, result);
-  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
