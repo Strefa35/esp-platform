@@ -20,8 +20,11 @@
 
 
 #define MGR_REG_TOPIC_MAX   20
+#define MGR_REG_NAME_MAX    20
 
 typedef char mgr_reg_topic_t[MGR_REG_TOPIC_MAX];
+
+typedef char mgr_reg_name_t[MGR_REG_NAME_MAX];
 
 typedef esp_err_t(*mgr_reg_init_f)(void);
 typedef esp_err_t(*mgr_reg_done_f)(void);
@@ -29,7 +32,9 @@ typedef esp_err_t(*mgr_reg_run_f)(void);
 typedef esp_err_t(*mgr_reg_send_f)(const msg_t* msg);
 
 typedef struct mgr_reg_s {
-  uint32_t        type;
+  mgr_reg_topic_t name; /* name of module */
+  uint32_t        type; /* type of module */
+  
   mgr_reg_init_f  init_fn;
   mgr_reg_done_f  done_fn;
   mgr_reg_run_f   run_fn;

@@ -27,11 +27,11 @@
 #include "lut.h"
 
 
-#define MGR_MSG_MAX           20
-
 #define MGR_TASK_NAME         "mgr-task"
 #define MGR_TASK_STACK_SIZE   4096
 #define MGR_TASK_PRIORITY     10
+
+#define MGR_MSG_MAX           40
 
 
 static const char* TAG = MGR_CTRL_TAG;
@@ -55,17 +55,6 @@ static esp_err_t mgr_Init(int id) {
   return result;
 }
 
-static esp_err_t mgr_Run(int id) {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s(id: %d, type: 0x%08lx)", __func__, id, mgr_reg_list[id].type);
-  if (mgr_reg_list[id].run_fn) {
-    result = mgr_reg_list[id].run_fn();
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
 static esp_err_t mgr_Done(int id) {
   esp_err_t result = ESP_OK;
 
@@ -77,30 +66,53 @@ static esp_err_t mgr_Done(int id) {
   return result;
 }
 
-static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t* payload) {
+static esp_err_t mgr_Run(int id) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(id: %d, type: 0x%08lx)", __func__, id, mgr_reg_list[id].type);
+  if (mgr_reg_list[id].run_fn) {
+    result = mgr_reg_list[id].run_fn();
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mgr_Send(const msg_t* msg) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (xQueueSend(mgr_msg_queue, msg, (TickType_t) 0) != pdPASS) {
+    ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg->type, msg->from, msg->to);
+    result = ESP_FAIL;
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t* eth) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
   switch (type) {
     case MSG_TYPE_ETH_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, payload->u.event.id, GET_ETH_EVENT_NAME(payload->u.event.id));
+      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_ETH_EVENT_NAME(eth->u.event.id));
       break;
     }
 
     case MSG_TYPE_ETH_IP: {
       uint8_t* addr = NULL;
 
-      addr = (uint8_t*) &(payload->u.ip_info.ip);
+      addr = (uint8_t*) &(eth->u.info.ip);
       ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
         addr[0], addr[1], addr[2], addr[3]
       );
 
-      addr = (uint8_t*) &(payload->u.ip_info.mask);
+      addr = (uint8_t*) &(eth->u.info.mask);
       ESP_LOGD(TAG, "[%s] MASK: %d.%d.%d.%d", __func__, 
         addr[0], addr[1], addr[2], addr[3]
       );
 
-      addr = (uint8_t*) &(payload->u.ip_info.gw);
+      addr = (uint8_t*) &(eth->u.info.gw);
       ESP_LOGD(TAG, "[%s]   GW: %d.%d.%d.%d", __func__, 
         addr[0], addr[1], addr[2], addr[3]
       );
@@ -121,20 +133,20 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
 
   ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
   switch (msg->from) {
-    case MSG_ETH_CTRL: {
+    case REG_ETH_CTRL: {
       result = mgr_ParseEthPayload(msg->type, &(msg->payload.eth));
       break;
     }
-    case MSG_CLI_CTRL: {
+    case REG_CLI_CTRL: {
       break;
     }
-    case MSG_GPIO_CTRL: {
+    case REG_GPIO_CTRL: {
       break;
     }
-    case MSG_POWER_CTRL: {
+    case REG_POWER_CTRL: {
       break;
     }
-    case MSG_MQTT_CTRL: {
+    case REG_MQTT_CTRL: {
       break;
     }
     default: {
@@ -178,7 +190,7 @@ static void mgr_TaskFn(void* param) {
       ESP_LOGD(TAG, "[%s] Message arrived: type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg.type, msg.from, msg.to);
 
       /* First, parse message in manager */
-      if (msg.to & MSG_MGR_CTRL) {
+      if (msg.to & REG_MGR_CTRL) {
         mgr_ParseMsg(&msg);
       }
       /* Now, notify specific (or all) registered controller */
@@ -271,13 +283,28 @@ esp_err_t MGR_Done(void) {
  * \return esp_err_t 
  */
 esp_err_t MGR_Run(void) {
+  msg_t msg = { 
+    .type = MSG_TYPE_MGR_LIST, 
+    .from = REG_MGR_CTRL, 
+    .to = REG_MQTT_CTRL,
+  };
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+  sprintf(msg.payload.mgr.msg, "[");
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+    strcat(msg.payload.mgr.msg, mgr_reg_list[idx].name);
+    if (idx < mgr_modules_cnt - 1) {
+      strcat(msg.payload.mgr.msg, ",");
+    }
     result = mgr_Run(idx);
   }
+  strcat(msg.payload.mgr.msg, "]");
+  ESP_LOGD(TAG, "[%s] List of modules: %s", __func__, msg.payload.mgr.msg);
   if (mgr_sem_id) {
+
+    mgr_Send(&msg);
+
     ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake...", __func__);
     xSemaphoreTake(mgr_sem_id, portMAX_DELAY);
     ESP_LOGD(TAG, "[%s] xSemaphoreTake was released.", __func__);
@@ -290,10 +317,7 @@ esp_err_t MGR_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  if (xQueueSend(mgr_msg_queue, msg, (TickType_t) 0) != pdPASS) {
-    ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg->type, msg->from, msg->to);
-    result = ESP_FAIL;
-  }
+  result = mgr_Send(msg);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

@@ -85,8 +85,8 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
   esp_eth_handle_t eth_handle = *(esp_eth_handle_t *) event_data;
   msg_t msg = { 
     .type = MSG_TYPE_ETH_EVENT, 
-    .from = MSG_ETH_CTRL, 
-    .to = MSG_ALL_CTRL,
+    .from = REG_ETH_CTRL, 
+    .to = REG_ALL_CTRL,
     .payload.eth.u.event.id = event_id,
     .payload.eth.u.event.mac = {0} 
   };
@@ -97,7 +97,7 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
       //esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
       esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, msg.payload.eth.u.event.mac);
       ESP_LOGI(TAG, "Ethernet Link Up");
-      ESP_LOGI(TAG, "Ethernet HW Addr %02x:%02x:%02x:%02x:%02x:%02x",
+      ESP_LOGI(TAG, "Ethernet HW Addr %02X:%02X:%02X:%02X:%02X:%02X",
                 msg.payload.eth.u.event.mac[0], 
                 msg.payload.eth.u.event.mac[1], 
                 msg.payload.eth.u.event.mac[2], 
@@ -139,7 +139,7 @@ static void ethctrl_IpEventHandler(void *arg, esp_event_base_t event_base,
 {
   ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
   const esp_netif_ip_info_t *ip_info = &event->ip_info;
-  msg_t msg = { .type = MSG_TYPE_ETH_IP, .from = MSG_ETH_CTRL, .to = MSG_ALL_CTRL };
+  msg_t msg = { .type = MSG_TYPE_ETH_IP, .from = REG_ETH_CTRL, .to = REG_ALL_CTRL };
 
   ESP_LOGI(TAG, "Ethernet Got IP Address");
   ESP_LOGI(TAG, "~~~~~~~~~~~");
@@ -148,9 +148,9 @@ static void ethctrl_IpEventHandler(void *arg, esp_event_base_t event_base,
   ESP_LOGI(TAG, "ETH GW: " IPSTR, IP2STR(&ip_info->gw));
   ESP_LOGI(TAG, "~~~~~~~~~~~");
 
-  msg.payload.eth.u.ip_info.ip    = ip_info->ip.addr;
-  msg.payload.eth.u.ip_info.mask  = ip_info->netmask.addr;
-  msg.payload.eth.u.ip_info.gw    = ip_info->gw.addr;
+  msg.payload.eth.u.info.ip   = ip_info->ip.addr;
+  msg.payload.eth.u.info.mask = ip_info->netmask.addr;
+  msg.payload.eth.u.info.gw   = ip_info->gw.addr;
 
   esp_err_t result = MGR_Send(&msg);
   ESP_LOGI(TAG, "MSG_Send() - result: %d", result);

@@ -22,6 +22,9 @@ typedef char data_topic_t[DATA_TOPIC_SIZE];
 typedef char data_msg_t[DATA_MSG_SIZE];
 
 typedef enum {
+  /* MGR module */
+  MSG_TYPE_MGR_LIST,
+
   /* ETH module */
   MSG_TYPE_ETH_EVENT,
   MSG_TYPE_ETH_IP,
@@ -33,20 +36,33 @@ typedef enum {
 } msg_type_e;
 
 /* ----------[ALL bits]----------- */
-#define MSG_ALL_CTRL    (~0)
+#define REG_ALL_CTRL    (~0)
+
+/* [1st byte]==========[8 bits]============= */
+#define REG_MGR_CTRL    (1 << 0)
+#define REG_ETH_CTRL    (1 << 1)
+#define REG_CLI_CTRL    (1 << 2)
+#define REG_GPIO_CTRL   (1 << 3)
 /* ----------[4 bits]------------- */
-#define MSG_MGR_CTRL    (1 << 0)
-#define MSG_ETH_CTRL    (1 << 1)
-#define MSG_CLI_CTRL    (1 << 2)
-#define MSG_GPIO_CTRL   (1 << 3)
-/* ----------[4 bits]------------- */
-#define MSG_POWER_CTRL  (1 << 4)
-#define MSG_MQTT_CTRL   (1 << 5)
+#define REG_POWER_CTRL  (1 << 4)
+#define REG_MQTT_CTRL   (1 << 5)
+
+/* [2nd byte]==========[8 bits]============= */
+
+/* [3rd byte]==========[8 bits]============= */
+
+/* [4th byte]==========[8 bits]============= */
+/*   Control bits                            */
+
+/* Can't communicate with them from the outside */
+#define REG_INT_CTRL    (1 << 30)   /* Internal Controller  */
+
+
 /* ----------[END]---------------- */
 
 /* MGR message payload */
 typedef struct {
-
+  data_msg_t  msg;
 } payload_mgr_t;
 
 /* ETH state definition */
@@ -71,13 +87,13 @@ typedef struct {
   uint32_t  ip;
   uint32_t  mask;
   uint32_t  gw;
-} data_eth_ip_t;
+} data_eth_info_t;
 
 /* ETH message payload */
 typedef struct {
   union {
     data_eth_event_t  event;
-    data_eth_ip_t     ip_info;
+    data_eth_info_t   info;
   } u;
 } payload_eth_t;
 
