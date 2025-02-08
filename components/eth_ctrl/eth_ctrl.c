@@ -139,7 +139,11 @@ static void ethctrl_IpEventHandler(void *arg, esp_event_base_t event_base,
 {
   ip_event_got_ip_t *event = (ip_event_got_ip_t *) event_data;
   const esp_netif_ip_info_t *ip_info = &event->ip_info;
-  msg_t msg = { .type = MSG_TYPE_ETH_IP, .from = REG_ETH_CTRL, .to = REG_ALL_CTRL };
+  msg_t msg = { 
+    .type = MSG_TYPE_ETH_IP, 
+    .from = REG_ETH_CTRL, 
+    .to = REG_ALL_CTRL
+  };
 
   ESP_LOGI(TAG, "Ethernet Got IP Address");
   ESP_LOGI(TAG, "~~~~~~~~~~~");

@@ -82,7 +82,9 @@ static esp_err_t mgr_Send(const msg_t* msg) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
   if (xQueueSend(mgr_msg_queue, msg, (TickType_t) 0) != pdPASS) {
-    ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg->type, msg->from, msg->to);
+    ESP_LOGE(TAG, "[%s] Message error. type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
+        msg->type, GET_MSG_TYPE_NAME(msg->type),
+        msg->from, msg->to);
     result = ESP_FAIL;
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
@@ -92,7 +94,7 @@ static esp_err_t mgr_Send(const msg_t* msg) {
 static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t* eth) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
+  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
   switch (type) {
     case MSG_TYPE_ETH_EVENT: {
       ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_ETH_EVENT_NAME(eth->u.event.id));
@@ -131,7 +133,9 @@ static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t*
 static esp_err_t mgr_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_FAIL;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
+  ESP_LOGI(TAG, "++%s(type: %d [%s], from: 0x%08lx, to: 0x%08lx)", __func__, 
+      msg->type, GET_MSG_TYPE_NAME(msg->type),
+      msg->from, msg->to);
   switch (msg->from) {
     case REG_ETH_CTRL: {
       result = mgr_ParseEthPayload(msg->type, &(msg->payload.eth));
@@ -160,7 +164,9 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
 static esp_err_t mgr_NotifyCtrl(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
+  ESP_LOGI(TAG, "++%s(type: %d [%s], from: 0x%08lx, to: 0x%08lx)", __func__, 
+      msg->type,  GET_MSG_TYPE_NAME(msg->type),
+      msg->from, msg->to);
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
     if (msg->to & mgr_reg_list[idx].type) {
       if (mgr_reg_list[idx].send_fn) {
@@ -187,14 +193,18 @@ static void mgr_TaskFn(void* param) {
   while (loop) {
     ESP_LOGD(TAG, "[%s] Wait...", __func__);
     if(xQueueReceive(mgr_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
-      ESP_LOGD(TAG, "[%s] Message arrived: type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg.type, msg.from, msg.to);
+      ESP_LOGD(TAG, "[%s] Message arrived: type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
+          msg.type, GET_MSG_TYPE_NAME(msg.type),
+          msg.from, msg.to);
 
       /* First, parse message in manager */
       if (msg.to & REG_MGR_CTRL) {
         mgr_ParseMsg(&msg);
       }
+
       /* Now, notify specific (or all) registered controller */
       result = mgr_NotifyCtrl(&msg);
+
       if (result != ESP_OK) {
         // TODO - Send Error to the Broker
         ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);

@@ -12,6 +12,17 @@
 #ifndef __LUT_H__
 #define __LUT_H__
 
+#include "msg.h"
+
+#define GET_MSG_TYPE_NAME(_type) ( \
+  _type == MSG_TYPE_MGR_LIST          ? "MSG_TYPE_MGR_LIST"       : \
+  _type == MSG_TYPE_ETH_EVENT         ? "MSG_TYPE_ETH_EVENT"      : \
+  _type == MSG_TYPE_ETH_IP            ? "MSG_TYPE_ETH_IP"         : \
+  _type == MSG_TYPE_MQTT_EVENT        ? "MSG_TYPE_MQTT_EVENT"     : \
+  _type == MSG_TYPE_MQTT_DATA         ? "MSG_TYPE_MQTT_DATA"      : \
+                                        "MSG_TYPE_UNKNOWN"          \
+)
+
 #define GET_ETH_EVENT_NAME(_event) ( \
   _event == ETH_EVENT_START         ? "ETH_EVENT_START"         : \
   _event == ETH_EVENT_STOP          ? "ETH_EVENT_STOP"          : \
