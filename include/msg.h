@@ -12,8 +12,6 @@
 #ifndef __MSG_H__
 #define __MSG_H__
 
-#include "esp_err.h"
-
 
 #define DATA_TOPIC_SIZE     20
 #define DATA_MSG_SIZE       100
@@ -21,6 +19,14 @@
 typedef char data_topic_t[DATA_TOPIC_SIZE];
 typedef char data_msg_t[DATA_MSG_SIZE];
 
+
+/*
+==================================================================
+  ENUMS
+==================================================================
+*/
+
+/* Message type definition */
 typedef enum {
   /* MGR module */
   MSG_TYPE_MGR_LIST,
@@ -34,6 +40,36 @@ typedef enum {
   MSG_TYPE_MQTT_DATA,
 
 } msg_type_e;
+
+/* ETH state definition */
+typedef enum {
+  DATA_ETH_EVENT_START,
+  DATA_ETH_EVENT_STOP,
+  DATA_ETH_EVENT_CONNECTED,
+  DATA_ETH_EVENT_DISCONNECTED,
+} data_eth_event_e;
+
+/* MQTT state definition */
+typedef enum {
+  DATA_MQTT_EVENT_ANY,
+  DATA_MQTT_EVENT_ERROR,
+  DATA_MQTT_EVENT_CONNECTED,
+  DATA_MQTT_EVENT_DISCONNECTED,
+  DATA_MQTT_EVENT_SUBSCRIBED,
+  DATA_MQTT_EVENT_UNSUBSCRIBED,
+  DATA_MQTT_EVENT_PUBLISHED,
+  DATA_MQTT_EVENT_DATA,
+  DATA_MQTT_EVENT_BEFORE_CONNECT,
+  DATA_MQTT_EVENT_DELETED,
+  DATA_MQTT_EVENT_USER,
+} data_mqtt_event_e;
+
+
+/*
+==================================================================
+  Bits definition for 'from/to'
+==================================================================
+*/
 
 /* ----------[ALL bits]----------- */
 #define REG_ALL_CTRL    (~0)
@@ -57,21 +93,20 @@ typedef enum {
 /* Can't communicate with them from the outside */
 #define REG_INT_CTRL    (1 << 30)   /* Internal Controller  */
 
-
 /* ----------[END]---------------- */
+
+
+/*
+==================================================================
+  Message structure
+==================================================================
+*/
 
 /* MGR message payload */
 typedef struct {
   data_msg_t  msg;
 } payload_mgr_t;
 
-/* ETH state definition */
-typedef enum {
-  ETH_EVENT_START,
-  ETH_EVENT_STOP,
-  ETH_EVENT_CONNECTED,
-  ETH_EVENT_DISCONNECTED,
-} data_eth_event_e;
 
 /* ETH MAC definition */
 typedef uint8_t data_eth_mac_t[6];
@@ -111,6 +146,7 @@ typedef struct {
 typedef struct {
 
 } payload_power_t;
+
 
 /* MQTT message payload */
 typedef struct {

@@ -25,8 +25,10 @@
 #include "mqtt_ctrl.h"
 
 #include "lut.h"
+#include "mqtt_lut.h"
 
-
+/* Temporary Broker URL - should be taken from NVM */
+#define CONFIG_BROKER_URL       "mqtt://10.0.0.10"
 
 #define MQTT_TASK_NAME          "mqtt-task"
 #define MQTT_TASK_STACK_SIZE    4096
@@ -41,7 +43,6 @@
 #define MQTT_UID_IDX            (0U)
 #define MQTT_TOPIC_IDX          (10U)
 
-#define CONFIG_BROKER_URL       "mqtt://10.0.0.10"
 
 #define GET_ETH_MAC(_mac)       _mac[0], _mac[1], _mac[2], _mac[3], _mac[4], _mac[5]
 
@@ -80,7 +81,6 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
     .type = MSG_TYPE_MQTT_EVENT, 
     .from = REG_MQTT_CTRL, 
     .to = REG_ALL_CTRL, 
-    .payload.mqtt.event_id = event->event_id 
   };
   bool send = false;
 
@@ -89,35 +89,38 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
 
   switch (event->event_id) {
     case MQTT_EVENT_CONNECTED: {
-      ESP_LOGD(TAG, "[%s] MQTT_EVENT_CONNECTED", __func__);
+      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_CONNECTED", __func__);
+      msg.payload.mqtt.event_id = DATA_MQTT_EVENT_CONNECTED;
       send = true;
       break;
     }
     case MQTT_EVENT_DISCONNECTED: {
-      ESP_LOGD(TAG, "[%s] MQTT_EVENT_DISCONNECTED", __func__);
+      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_DISCONNECTED", __func__);
       break;
     }
     case MQTT_EVENT_SUBSCRIBED: {
-      ESP_LOGD(TAG, "[%s] MQTT_EVENT_SUBSCRIBED", __func__);
+      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_SUBSCRIBED", __func__);
       break;
     }
     case MQTT_EVENT_UNSUBSCRIBED: {
-      ESP_LOGD(TAG, "[%s] MQTT_EVENT_UNSUBSCRIBED", __func__);
+      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_UNSUBSCRIBED", __func__);
       esp_mqtt_client_disconnect(mqtt_client);
       break;
     }
     case MQTT_EVENT_PUBLISHED: {
-      ESP_LOGD(TAG, "[%s] MQTT_EVENT_PUBLISHED", __func__);
+      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_PUBLISHED", __func__);
       break;
     }
     case MQTT_EVENT_DATA: {
-      ESP_LOGD(TAG, "[%s] MQTT_EVENT_DATA", __func__);
+      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_DATA", __func__);
       ESP_LOGI(TAG, "TOPIC: %.*s", event->topic_len, event->topic);
       ESP_LOGI(TAG, " DATA: %.*s", event->data_len, event->data);
+      msg.payload.mqtt.event_id = DATA_MQTT_EVENT_DATA;
+      send = true;
       break;
     }
     case MQTT_EVENT_ERROR: {
-      ESP_LOGD(TAG, "[%s] MQTT_EVENT_ERROR", __func__);
+      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_ERROR", __func__);
       break;
     }
     default: {
@@ -127,7 +130,9 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
   }
   if (send) {
     if (xQueueSend(mqtt_msg_queue, &msg, (TickType_t) 0) != pdPASS) {
-      ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg.type, msg.from, msg.to);
+      ESP_LOGE(TAG, "[%s] Message error. type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
+          msg.type, GET_MSG_TYPE_NAME(msg.type),
+          msg.from, msg.to);
     }
   }
   ESP_LOGI(TAG, "--%s()", __func__);
@@ -222,11 +227,11 @@ static esp_err_t mqttctrl_Subscribe(void) {
 static esp_err_t mqttctrl_ParseEthPayload(const msg_type_e type, const payload_eth_t* eth) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
+  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
   switch (type) {
     case MSG_TYPE_ETH_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_ETH_EVENT_NAME(eth->u.event.id));
-      if (eth->u.event.id == ETH_EVENT_CONNECTED) {
+      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_DATA_ETH_EVENT_NAME(eth->u.event.id));
+      if (eth->u.event.id == DATA_ETH_EVENT_CONNECTED) {
         /* Clear topic buffer */
         memset(mqtt_topic_buffer, 0x00, MQTT_TOPIC_MAX_LEN);
         /* MAC address */
@@ -282,7 +287,7 @@ static esp_err_t mqttctrl_ParseMqttEvent(const esp_mqtt_event_id_t event_id) {
 
   ESP_LOGI(TAG, "++%s(event_id: %d [%s])", __func__, event_id, GET_MQTT_EVENT_NAME(event_id));
   switch (event_id) {
-    case MQTT_EVENT_CONNECTED: {
+    case DATA_MQTT_EVENT_CONNECTED: {
       ESP_LOGD(TAG, "[%s] UID: %s", __func__, mqtt_uid);
       
       /* Notify MQTT Broker about client connected */
@@ -305,7 +310,7 @@ static esp_err_t mqttctrl_ParseMqttEvent(const esp_mqtt_event_id_t event_id) {
 static esp_err_t mqttctrl_ParseMgrPayload(const msg_type_e type, const payload_mgr_t* payload) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
+  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
   switch (type) {
     case MSG_TYPE_MGR_LIST: {
       ESP_LOGD(TAG, "[%s] List: '%s'", __func__, payload->msg);
@@ -323,10 +328,10 @@ static esp_err_t mqttctrl_ParseMgrPayload(const msg_type_e type, const payload_m
 static esp_err_t mqttctrl_ParseMqttPayload(const msg_type_e type, const payload_mqtt_t* payload) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d)", __func__, type);
+  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
   switch (type) {
     case MSG_TYPE_MQTT_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %ld [%s]", __func__, payload->event_id, GET_MQTT_EVENT_NAME(payload->event_id));
+      ESP_LOGD(TAG, "[%s] Event: %ld [%s]", __func__, payload->event_id, GET_DATA_MQTT_EVENT_NAME(payload->event_id));
 
       result = mqttctrl_ParseMqttEvent(payload->event_id);
       break;
@@ -347,7 +352,9 @@ static esp_err_t mqttctrl_ParseMqttPayload(const msg_type_e type, const payload_
 static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_FAIL;
 
-  ESP_LOGI(TAG, "++%s(type: %d, from: 0x%08lx, to: 0x%08lx)", __func__, msg->type, msg->from, msg->to);
+  ESP_LOGI(TAG, "++%s(type: %d [%s], from: 0x%08lx, to: 0x%08lx)", __func__, 
+      msg->type, GET_MSG_TYPE_NAME(msg->type),
+      msg->from, msg->to);
   switch (msg->from) {
     case REG_MGR_CTRL: {
       result = mqttctrl_ParseMgrPayload(msg->type, &(msg->payload.mgr));
@@ -393,9 +400,12 @@ static void mqttctrl_TaskFn(void* param) {
   while (loop) {
     ESP_LOGD(TAG, "[%s] Wait...", __func__);
     if(xQueueReceive(mqtt_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
-      ESP_LOGD(TAG, "[%s] Message arrived: type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg.type, msg.from, msg.to);
+      ESP_LOGD(TAG, "[%s] Message arrived: type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
+          msg.type, GET_MSG_TYPE_NAME(msg.type),
+          msg.from, msg.to);
       
       result = mqttctrl_ParseMsg(&msg);
+
       if (result != ESP_OK) {
         // TODO - Send Error to the Broker
         ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);

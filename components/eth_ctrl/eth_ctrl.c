@@ -104,22 +104,22 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
                 msg.payload.eth.u.event.mac[3], 
                 msg.payload.eth.u.event.mac[4], 
                 msg.payload.eth.u.event.mac[5]);
-      msg.payload.eth.u.event.id = ETH_EVENT_CONNECTED;
+      msg.payload.eth.u.event.id = DATA_ETH_EVENT_CONNECTED;
       break;
     }
     case ETHERNET_EVENT_DISCONNECTED: {
       ESP_LOGI(TAG, "Ethernet Link Down");
-      msg.payload.eth.u.event.id = ETH_EVENT_DISCONNECTED;
+      msg.payload.eth.u.event.id = DATA_ETH_EVENT_DISCONNECTED;
       break;
     }
     case ETHERNET_EVENT_START: {
       ESP_LOGI(TAG, "Ethernet Started");
-      msg.payload.eth.u.event.id = ETH_EVENT_START;
+      msg.payload.eth.u.event.id = DATA_ETH_EVENT_START;
       break;
     }
     case ETHERNET_EVENT_STOP: {
       ESP_LOGI(TAG, "Ethernet Stopped");
-      msg.payload.eth.u.event.id = ETH_EVENT_STOP;
+      msg.payload.eth.u.event.id = DATA_ETH_EVENT_STOP;
       break;
     }
     default: {

@@ -97,7 +97,7 @@ static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t*
   ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
   switch (type) {
     case MSG_TYPE_ETH_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_ETH_EVENT_NAME(eth->u.event.id));
+      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_DATA_ETH_EVENT_NAME(eth->u.event.id));
       break;
     }
 
