@@ -15,6 +15,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "cJSON.h"
+
 #include "sdkconfig.h"
 
 #include "tags.h"
@@ -27,11 +29,20 @@
 #include "lut.h"
 
 
-#define MGR_TASK_NAME         "mgr-task"
-#define MGR_TASK_STACK_SIZE   4096
-#define MGR_TASK_PRIORITY     10
+#define MGR_TASK_NAME           "mgr-task"
+#define MGR_TASK_STACK_SIZE     4096
+#define MGR_TASK_PRIORITY       10
 
-#define MGR_MSG_MAX           40
+#define MGR_MSG_MAX             40
+
+#define GET_ETH_MAC(_mac)       _mac[0], _mac[1], _mac[2], _mac[3], _mac[4], _mac[5]
+
+#define MGR_TOPIC_MAX_LEN       (32U)
+#define MGR_UID_LEN             (10U)
+#define MGR_TOPIC_LEN           (MGR_TOPIC_MAX_LEN - MGR_UID_LEN - 1)
+
+#define MGR_UID_IDX             (0U)
+#define MGR_TOPIC_IDX           (10U)
 
 
 static const char* TAG = MGR_CTRL_TAG;
@@ -42,6 +53,30 @@ static int mgr_modules_cnt = MGR_REG_LIST_CNT;
 static QueueHandle_t      mgr_msg_queue = NULL;
 static TaskHandle_t       mgr_task_id = NULL;
 static SemaphoreHandle_t  mgr_sem_id = NULL;
+
+static data_eth_mac_t     mgr_eth_mac = {};
+static data_eth_info_t    mgr_eth_info = {};
+
+
+/**
+ * @brief Buffer to prepare topic
+ *
+ * The buffer is used to prepare the topic.
+ * It consists of the following parts:
+ *
+ *   UID/topic
+ *      where:
+ *        - UID - has 10 bytes: 'ESP_12AB34'
+ *        - topic - has MQTT_TOPIC_LEN bytes: '/req/sys', /res/sys, /event/sys
+ */
+static char     mgr_topic_buffer[MGR_TOPIC_MAX_LEN];
+
+static char     mgr_uid_pattern[] = "ESP_%02X%02X%02X";
+static char     mgr_uid[MGR_UID_LEN + 1] = {}; /* keeps only UID, as: ESP_12AB34 */
+
+static char*    mgr_uid_ptr    = &mgr_topic_buffer[MGR_UID_IDX];
+static char*    mgr_topic_ptr  = &mgr_topic_buffer[MGR_TOPIC_IDX];
+
 
 
 static esp_err_t mgr_Init(int id) {
@@ -91,6 +126,53 @@ static esp_err_t mgr_Send(const msg_t* msg) {
   return result;
 }
 
+/**
+ * @brief Create a UID
+ *
+ * Creates UID from MAC address.
+ * It will be as: ESP_12AB34
+ *
+ */
+static void create_Uid(void) {
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  sprintf(mgr_uid, mgr_uid_pattern, mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
+  sprintf(mgr_uid_ptr, mgr_uid_pattern, mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
+
+  ESP_LOGD(TAG, "[%s]     mgr_uid: '%s'", __func__, mgr_uid);
+  ESP_LOGD(TAG, "[%s] mgr_uid_ptr: '%s'", __func__, mgr_uid_ptr);
+
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
+/**
+ * @brief Create a list of registered modules
+ * 
+ */
+void create_ModuleList(void) {
+  const char json_reg[] = "{ \"uid\": \"\", \"list\": [] }";
+  cJSON *root;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mgr_eth_mac));
+  root = cJSON_Parse(json_reg);
+  if (root != NULL)
+  {
+    //cJSON_AddStringToObject(root, "uid", mgr_uid);
+    cJSON *uid = cJSON_GetObjectItem(root, "uid");
+    cJSON_SetValuestring(uid, mgr_uid);
+
+    cJSON *list = cJSON_GetObjectItem(root, "list");
+    for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+      cJSON_AddItemToArray(list, cJSON_CreateString(mgr_reg_list[idx].name));
+    }
+    ESP_LOGD(TAG, "[%s] JSON: '%s'", __func__, cJSON_Print(root));
+    ;
+    cJSON_Delete(root);
+  }
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
 static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t* eth) {
   esp_err_t result = ESP_OK;
 
@@ -98,23 +180,32 @@ static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t*
   switch (type) {
     case MSG_TYPE_ETH_EVENT: {
       ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_DATA_ETH_EVENT_NAME(eth->u.event.id));
+      if (eth->u.event.id == DATA_ETH_EVENT_CONNECTED) {
+        /* Store MAC address */
+        memcpy(mgr_eth_mac, eth->u.event.mac, sizeof(eth->u.event.mac));
+        ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mgr_eth_mac));
+        create_Uid();
+        create_ModuleList();
+      }
       break;
     }
 
     case MSG_TYPE_ETH_IP: {
       uint8_t* addr = NULL;
 
-      addr = (uint8_t*) &(eth->u.info.ip);
+      mgr_eth_info = eth->u.info;
+
+      addr = (uint8_t*) &(mgr_eth_info.ip);
       ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
         addr[0], addr[1], addr[2], addr[3]
       );
 
-      addr = (uint8_t*) &(eth->u.info.mask);
+      addr = (uint8_t*) &(mgr_eth_info.mask);
       ESP_LOGD(TAG, "[%s] MASK: %d.%d.%d.%d", __func__, 
         addr[0], addr[1], addr[2], addr[3]
       );
 
-      addr = (uint8_t*) &(eth->u.info.gw);
+      addr = (uint8_t*) &(mgr_eth_info.gw);
       ESP_LOGD(TAG, "[%s]   GW: %d.%d.%d.%d", __func__, 
         addr[0], addr[1], addr[2], addr[3]
       );
@@ -224,7 +315,7 @@ static esp_err_t mgr_NotifyCtrl(const msg_t* msg) {
 static void mgr_TaskFn(void* param) {
   msg_t msg;
   bool loop = true;
-  esp_err_t result;
+  esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
   memset(&msg, 0x00, sizeof(msg_t));
@@ -237,11 +328,13 @@ static void mgr_TaskFn(void* param) {
 
       /* First, parse message in manager */
       if (msg.to & REG_MGR_CTRL) {
-        mgr_ParseMsg(&msg);
+        result = mgr_ParseMsg(&msg);
       }
 
       /* Now, notify specific (or all) registered controller */
-      result = mgr_NotifyCtrl(&msg);
+      if (msg.to & (~REG_MGR_CTRL)) {
+        result = mgr_NotifyCtrl(&msg);
+      }
 
       if (result != ESP_OK) {
         // TODO - Send Error to the Broker

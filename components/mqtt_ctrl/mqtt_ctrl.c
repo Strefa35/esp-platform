@@ -45,8 +45,6 @@
 #define MQTT_TOPIC_IDX          (10U)
 
 
-#define GET_ETH_MAC(_mac)       _mac[0], _mac[1], _mac[2], _mac[3], _mac[4], _mac[5]
-
 static const char* TAG = MQTT_CTRL_TAG;
 
 static esp_mqtt_client_handle_t mqtt_client = NULL;
@@ -72,9 +70,6 @@ static char     mqtt_uid[MQTT_UID_LEN + 1] = {}; /* keeps only UID, as: ESP_12AB
 
 static char*    mqtt_uid_ptr    = &mqtt_topic_buffer[MQTT_UID_IDX];
 static char*    mqtt_topic_ptr  = &mqtt_topic_buffer[MQTT_TOPIC_IDX];
-
-static data_eth_mac_t   mqtt_eth_mac = {};
-static data_eth_info_t  mqtt_eth_info = {};
 
 /**
  * @brief MQTT event handler
@@ -250,6 +245,7 @@ static esp_err_t mqttctrl_ParseEthPayload(const msg_type_e type, const payload_e
     case MSG_TYPE_ETH_EVENT: {
       ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_DATA_ETH_EVENT_NAME(eth->u.event.id));
       if (eth->u.event.id == DATA_ETH_EVENT_CONNECTED) {
+#if 0
         /* Clear topic buffer */
         memset(mqtt_topic_buffer, 0x00, MQTT_TOPIC_MAX_LEN);
         /* MAC address */
@@ -263,11 +259,13 @@ static esp_err_t mqttctrl_ParseEthPayload(const msg_type_e type, const payload_e
 
         ESP_LOGD(TAG, "[%s]     mqtt_uid: '%s'", __func__, mqtt_uid);
         ESP_LOGD(TAG, "[%s] mqtt_uid_ptr: '%s'", __func__, mqtt_uid_ptr);
+#endif
       }
       break;
     }
 
     case MSG_TYPE_ETH_IP: {
+#if 0
       uint8_t* addr = NULL;
 
       addr = (uint8_t*) &(eth->u.info.ip);
@@ -289,6 +287,7 @@ static esp_err_t mqttctrl_ParseEthPayload(const msg_type_e type, const payload_e
       if (result != ESP_OK) {
         ESP_LOGE(TAG, "[%s] mqttctrl_StartClient() - result: %d", __func__, result);
       }
+#endif
       break;
     }
     default: {
