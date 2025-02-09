@@ -130,6 +130,43 @@ static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t*
   return result;
 }
 
+static esp_err_t mgr_ParseMqttData(const char* topic, const char* msg) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(topic: '%s', msg: '%s')", __func__, topic, msg);
+
+  /* Find msg_type_e from the topic */
+  /* and call send_fn() for it      */
+
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mgr_ParseMqttPayload(const msg_type_e type, const payload_mqtt_t* mqtt) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
+  switch (type) {
+    case MSG_TYPE_MQTT_EVENT: {
+      ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, mqtt->event_id, GET_DATA_MQTT_EVENT_NAME(mqtt->event_id));
+      break;
+    }
+    case MSG_TYPE_MQTT_DATA: {
+      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, mqtt->topic);
+      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, mqtt->msg);
+      result = mgr_ParseMqttData(mqtt->topic, mqtt->msg);
+      break;
+    }
+    default: {
+      result = ESP_FAIL;
+      break;
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t mgr_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_FAIL;
 
@@ -151,6 +188,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       break;
     }
     case REG_MQTT_CTRL: {
+      result = mgr_ParseMqttPayload(msg->type, &(msg->payload.mqtt));
       break;
     }
     default: {

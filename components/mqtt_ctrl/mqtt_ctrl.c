@@ -22,6 +22,7 @@
 #include "tags.h"
 
 #include "msg.h"
+#include "mgr_ctrl.h"
 #include "mqtt_ctrl.h"
 
 #include "lut.h"
@@ -75,12 +76,20 @@ static char*    mqtt_topic_ptr  = &mqtt_topic_buffer[MQTT_TOPIC_IDX];
 static data_eth_mac_t   mqtt_eth_mac = {};
 static data_eth_info_t  mqtt_eth_info = {};
 
+/**
+ * @brief MQTT event handler
+ *
+ * @param handler_args
+ * @param base
+ * @param event_id
+ * @param event_data
+ */
 static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
   esp_mqtt_event_handle_t event = event_data;
   msg_t msg = { 
     .type = MSG_TYPE_MQTT_EVENT, 
     .from = REG_MQTT_CTRL, 
-    .to = REG_ALL_CTRL, 
+    .to   = REG_ALL_CTRL, 
   };
   bool send = false;
 
@@ -89,38 +98,45 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
 
   switch (event->event_id) {
     case MQTT_EVENT_CONNECTED: {
-      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_CONNECTED", __func__);
       msg.payload.mqtt.event_id = DATA_MQTT_EVENT_CONNECTED;
       send = true;
       break;
     }
     case MQTT_EVENT_DISCONNECTED: {
-      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_DISCONNECTED", __func__);
       break;
     }
     case MQTT_EVENT_SUBSCRIBED: {
-      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_SUBSCRIBED", __func__);
       break;
     }
     case MQTT_EVENT_UNSUBSCRIBED: {
-      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_UNSUBSCRIBED", __func__);
       esp_mqtt_client_disconnect(mqtt_client);
       break;
     }
     case MQTT_EVENT_PUBLISHED: {
-      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_PUBLISHED", __func__);
       break;
     }
     case MQTT_EVENT_DATA: {
-      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_DATA", __func__);
       ESP_LOGI(TAG, "TOPIC: %.*s", event->topic_len, event->topic);
       ESP_LOGI(TAG, " DATA: %.*s", event->data_len, event->data);
+
+      msg.type = MSG_TYPE_MQTT_DATA;
+      msg.to = REG_MGR_CTRL;
       msg.payload.mqtt.event_id = DATA_MQTT_EVENT_DATA;
+
+      if ((event->topic_len < DATA_TOPIC_SIZE) && (event->data_len < DATA_MSG_SIZE)) {
+        strncpy(msg.payload.mqtt.topic, event->topic, event->topic_len);
+        strncpy(msg.payload.mqtt.msg, event->data, event->data_len);
+      } else {
+        ESP_LOGE(TAG, "[%s] Size is too big -> topic: %d, data: %d", __func__,
+            event->topic_len, event->data_len);
+        memset(msg.payload.mqtt.topic, 0x00, sizeof(data_topic_t));
+        memset(msg.payload.mqtt.msg, 0x00, sizeof(data_msg_t));
+      }
       send = true;
       break;
     }
     case MQTT_EVENT_ERROR: {
-      ESP_LOGD(TAG, "[%s] DATA_MQTT_EVENT_ERROR", __func__);
+      ESP_LOGD(TAG, "[%s] MQTT_EVENT_ERROR", __func__);
       break;
     }
     default: {
@@ -129,8 +145,10 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
     }
   }
   if (send) {
-    if (xQueueSend(mqtt_msg_queue, &msg, (TickType_t) 0) != pdPASS) {
-      ESP_LOGE(TAG, "[%s] Message error. type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
+    ESP_LOGD(TAG, "[%s] MGR_Send() -> msg.type: %d [%s]", __func__, 
+        msg.type, GET_MSG_TYPE_NAME(msg.type));
+    if (MGR_Send(&msg) != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] Message error. type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__,
           msg.type, GET_MSG_TYPE_NAME(msg.type),
           msg.from, msg.to);
     }
@@ -331,7 +349,7 @@ static esp_err_t mqttctrl_ParseMqttPayload(const msg_type_e type, const payload_
   ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
   switch (type) {
     case MSG_TYPE_MQTT_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %ld [%s]", __func__, payload->event_id, GET_DATA_MQTT_EVENT_NAME(payload->event_id));
+      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, payload->event_id, GET_DATA_MQTT_EVENT_NAME(payload->event_id));
 
       result = mqttctrl_ParseMqttEvent(payload->event_id);
       break;

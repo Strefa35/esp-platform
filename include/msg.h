@@ -150,10 +150,15 @@ typedef struct {
 
 /* MQTT message payload */
 typedef struct {
-  int32_t       event_id;
-  data_topic_t  topic;
-  data_msg_t    msg;
+  data_mqtt_event_e event_id;
+  data_topic_t      topic;
+  data_msg_t        msg;
 } payload_mqtt_t;
+
+/* Error message structure */
+typedef struct {
+
+} payload_error_t;
 
 /**
  * @brief Message structure
@@ -170,6 +175,7 @@ typedef struct {
     payload_gpio_t    gpio;
     payload_power_t   power;
     payload_mqtt_t    mqtt;
+    payload_error_t   error;
   } payload;
 } msg_t;
 

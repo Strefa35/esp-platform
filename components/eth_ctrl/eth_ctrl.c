@@ -77,7 +77,15 @@ typedef struct {
 static esp_eth_handle_t *eth_ctrl_handles = NULL;
 static uint8_t eth_ctrl_cnt = 0;
 
-/** Event handler for Ethernet events */
+
+/**
+ * @brief Event handler for Ethernet events
+ *
+ * @param arg
+ * @param event_base
+ * @param event_id
+ * @param event_data
+ */
 static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
                                     int32_t event_id, void *event_data)
 {
