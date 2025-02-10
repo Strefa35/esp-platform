@@ -57,6 +57,8 @@ static SemaphoreHandle_t  mgr_sem_id = NULL;
 static data_eth_mac_t     mgr_eth_mac = {};
 static data_eth_info_t    mgr_eth_info = {};
 
+static data_json_t        mgr_module_list = "";
+
 
 /**
  * @brief Buffer to prepare topic
@@ -77,6 +79,8 @@ static char     mgr_uid[MGR_UID_LEN + 1] = {}; /* keeps only UID, as: ESP_12AB34
 static char*    mgr_uid_ptr    = &mgr_topic_buffer[MGR_UID_IDX];
 static char*    mgr_topic_ptr  = &mgr_topic_buffer[MGR_TOPIC_IDX];
 
+static mgr_reg_send_f mgr_send_to_mqtt_fn = NULL;
+
 
 
 static esp_err_t mgr_Init(int id) {
@@ -85,6 +89,9 @@ static esp_err_t mgr_Init(int id) {
   ESP_LOGI(TAG, "++%s(id: %d, type: 0x%08lx)", __func__, id, mgr_reg_list[id].type);
   if (mgr_reg_list[id].init_fn) {
     result = mgr_reg_list[id].init_fn();
+    if (mgr_reg_list[id].type & REG_MQTT_CTRL) {
+      mgr_send_to_mqtt_fn = mgr_reg_list[id].send_fn;
+    }
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -133,7 +140,7 @@ static esp_err_t mgr_Send(const msg_t* msg) {
  * It will be as: ESP_12AB34
  *
  */
-static void create_Uid(void) {
+static void mgr_CreateUid(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
 
   sprintf(mgr_uid, mgr_uid_pattern, mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
@@ -149,7 +156,7 @@ static void create_Uid(void) {
  * @brief Create a list of registered modules
  * 
  */
-void create_ModuleList(void) {
+void mgr_CreateModuleList(void) {
   const char json_reg[] = "{ \"uid\": \"\", \"list\": [] }";
   cJSON *root;
 
@@ -158,7 +165,6 @@ void create_ModuleList(void) {
   root = cJSON_Parse(json_reg);
   if (root != NULL)
   {
-    //cJSON_AddStringToObject(root, "uid", mgr_uid);
     cJSON *uid = cJSON_GetObjectItem(root, "uid");
     cJSON_SetValuestring(uid, mgr_uid);
 
@@ -166,59 +172,40 @@ void create_ModuleList(void) {
     for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
       cJSON_AddItemToArray(list, cJSON_CreateString(mgr_reg_list[idx].name));
     }
-    ESP_LOGD(TAG, "[%s] JSON: '%s'", __func__, cJSON_Print(root));
-    ;
+    char* json_str = cJSON_PrintUnformatted(root);
+    ESP_LOGD(TAG, "[%s] JSON: '%s'", __func__, json_str);
+    if (mgr_send_to_mqtt_fn) {
+      msg_t msg;
+
+      msg.type = MSG_TYPE_MQTT_PUBLISH;
+      msg.from = REG_MGR_CTRL;
+      msg.to = REG_MQTT_CTRL;
+
+      sprintf(msg.payload.mqtt.u.data.topic, "REGISTER/ESP");
+      cJSON_PrintPreallocated(root, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0);
+
+      esp_err_t result = mgr_send_to_mqtt_fn(&msg);
+    }
     cJSON_Delete(root);
   }
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
-static esp_err_t mgr_ParseEthPayload(const msg_type_e type, const payload_eth_t* eth) {
-  esp_err_t result = ESP_OK;
+void mgr_CreateSubscribeList(void) {
+  ESP_LOGI(TAG, "++%s()", __func__);
 
-  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
-  switch (type) {
-    case MSG_TYPE_ETH_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_DATA_ETH_EVENT_NAME(eth->u.event.id));
-      if (eth->u.event.id == DATA_ETH_EVENT_CONNECTED) {
-        /* Store MAC address */
-        memcpy(mgr_eth_mac, eth->u.event.mac, sizeof(eth->u.event.mac));
-        ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mgr_eth_mac));
-        create_Uid();
-        create_ModuleList();
-      }
-      break;
-    }
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
 
-    case MSG_TYPE_ETH_IP: {
-      uint8_t* addr = NULL;
-
-      mgr_eth_info = eth->u.info;
-
-      addr = (uint8_t*) &(mgr_eth_info.ip);
-      ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
-        addr[0], addr[1], addr[2], addr[3]
-      );
-
-      addr = (uint8_t*) &(mgr_eth_info.mask);
-      ESP_LOGD(TAG, "[%s] MASK: %d.%d.%d.%d", __func__, 
-        addr[0], addr[1], addr[2], addr[3]
-      );
-
-      addr = (uint8_t*) &(mgr_eth_info.gw);
-      ESP_LOGD(TAG, "[%s]   GW: %d.%d.%d.%d", __func__, 
-        addr[0], addr[1], addr[2], addr[3]
-      );
-      break;
-    }
-
-    default: {
-      result = ESP_FAIL;
-      break;
-    }
+void mgr_StartMqtt(void) {
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (mgr_send_to_mqtt_fn) {
+    msg_t msg = {
+      .type = MSG_TYPE_MQTT_START
+    };
+    esp_err_t result = mgr_send_to_mqtt_fn(&msg);
   }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
+  ESP_LOGI(TAG, "--%s()", __func__);
 }
 
 static esp_err_t mgr_ParseMqttData(const char* topic, const char* msg) {
@@ -234,54 +221,74 @@ static esp_err_t mgr_ParseMqttData(const char* topic, const char* msg) {
   return result;
 }
 
-static esp_err_t mgr_ParseMqttPayload(const msg_type_e type, const payload_mqtt_t* mqtt) {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
-  switch (type) {
-    case MSG_TYPE_MQTT_EVENT: {
-      ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, mqtt->event_id, GET_DATA_MQTT_EVENT_NAME(mqtt->event_id));
-      break;
-    }
-    case MSG_TYPE_MQTT_DATA: {
-      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, mqtt->topic);
-      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, mqtt->msg);
-      result = mgr_ParseMqttData(mqtt->topic, mqtt->msg);
-      break;
-    }
-    default: {
-      result = ESP_FAIL;
-      break;
-    }
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
 static esp_err_t mgr_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_FAIL;
 
   ESP_LOGI(TAG, "++%s(type: %d [%s], from: 0x%08lx, to: 0x%08lx)", __func__, 
       msg->type, GET_MSG_TYPE_NAME(msg->type),
       msg->from, msg->to);
-  switch (msg->from) {
-    case REG_ETH_CTRL: {
-      result = mgr_ParseEthPayload(msg->type, &(msg->payload.eth));
+
+  switch (msg->type) {
+
+    case MSG_TYPE_ETH_EVENT: {
+      data_eth_event_e event_id = msg->payload.eth.u.event_id;
+
+      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, event_id, GET_DATA_ETH_EVENT_NAME(event_id));
       break;
     }
-    case REG_CLI_CTRL: {
+
+    case MSG_TYPE_ETH_MAC: {
+      const data_eth_mac_t* mac_ptr = &(msg->payload.eth.u.mac);
+
+      /* Store MAC address */
+      memcpy(mgr_eth_mac, mac_ptr, sizeof(data_eth_mac_t));
+      ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mgr_eth_mac));
+
+      mgr_CreateUid();
+      mgr_CreateModuleList();
+      mgr_CreateSubscribeList();
       break;
     }
-    case REG_GPIO_CTRL: {
+
+    case MSG_TYPE_ETH_IP: {
+      uint8_t* addr = NULL;
+
+      const data_eth_info_t* info_ptr = &(msg->payload.eth.u.info);
+
+      addr = (uint8_t*) &(info_ptr->ip);
+      ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
+
+      addr = (uint8_t*) &(info_ptr->mask);
+      ESP_LOGD(TAG, "[%s] MASK: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
+
+      addr = (uint8_t*) &(info_ptr->gw);
+      ESP_LOGD(TAG, "[%s]   GW: %d.%d.%d.%d", __func__, 
+        addr[0], addr[1], addr[2], addr[3]
+      );
+
+      mgr_StartMqtt();
       break;
     }
-    case REG_POWER_CTRL: {
+
+    case MSG_TYPE_MQTT_EVENT: {
+      data_mqtt_event_e event_id = msg->payload.mqtt.u.event_id;
+
+      ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, event_id, GET_DATA_MQTT_EVENT_NAME(event_id));
       break;
     }
-    case REG_MQTT_CTRL: {
-      result = mgr_ParseMqttPayload(msg->type, &(msg->payload.mqtt));
+    case MSG_TYPE_MQTT_DATA: {
+      const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
+
+      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, data_ptr->topic);
+      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, data_ptr->msg);
+      result = mgr_ParseMqttData(data_ptr->topic, data_ptr->msg);
       break;
     }
+
     default: {
       break;
     }
@@ -424,32 +431,18 @@ esp_err_t MGR_Done(void) {
  * \return esp_err_t 
  */
 esp_err_t MGR_Run(void) {
-  msg_t msg = { 
-    .type = MSG_TYPE_MGR_LIST, 
-    .from = REG_MGR_CTRL, 
-    .to = REG_MQTT_CTRL,
-  };
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  sprintf(msg.payload.mgr.msg, "[");
+
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-    strcat(msg.payload.mgr.msg, mgr_reg_list[idx].name);
-    if (idx < mgr_modules_cnt - 1) {
-      strcat(msg.payload.mgr.msg, ",");
-    }
     result = mgr_Run(idx);
   }
-  strcat(msg.payload.mgr.msg, "]");
-  ESP_LOGD(TAG, "[%s] List of modules: %s", __func__, msg.payload.mgr.msg);
-  if (mgr_sem_id) {
 
-    mgr_Send(&msg);
+  ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake...", __func__);
+  xSemaphoreTake(mgr_sem_id, portMAX_DELAY);
+  ESP_LOGD(TAG, "[%s] xSemaphoreTake was released.", __func__);
 
-    ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake...", __func__);
-    xSemaphoreTake(mgr_sem_id, portMAX_DELAY);
-    ESP_LOGD(TAG, "[%s] xSemaphoreTake was released.", __func__);
-  }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

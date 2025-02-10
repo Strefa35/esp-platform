@@ -13,13 +13,6 @@
 #define __MSG_H__
 
 
-#define DATA_TOPIC_SIZE     20
-#define DATA_MSG_SIZE       100
-
-typedef char data_topic_t[DATA_TOPIC_SIZE];
-typedef char data_msg_t[DATA_MSG_SIZE];
-
-
 /*
 ==================================================================
   ENUMS
@@ -33,11 +26,15 @@ typedef enum {
 
   /* ETH module */
   MSG_TYPE_ETH_EVENT,
+  MSG_TYPE_ETH_MAC,
   MSG_TYPE_ETH_IP,
 
   /* MQTT module */
+  MSG_TYPE_MQTT_START,
   MSG_TYPE_MQTT_EVENT,
   MSG_TYPE_MQTT_DATA,
+  MSG_TYPE_MQTT_PUBLISH,
+  MSG_TYPE_MQTT_SUBSCRIBE,
 
 } msg_type_e;
 
@@ -102,20 +99,18 @@ typedef enum {
 ==================================================================
 */
 
-/* MGR message payload */
-typedef struct {
-  data_msg_t  msg;
-} payload_mgr_t;
 
+#define DATA_TOPIC_SIZE     20
+#define DATA_MSG_SIZE       100
+#define DATA_JSON_SIZE      150
+
+
+typedef char data_topic_t[DATA_TOPIC_SIZE];
+typedef char data_msg_t[DATA_MSG_SIZE];
+typedef char data_json_t[DATA_JSON_SIZE];
 
 /* ETH MAC definition */
 typedef uint8_t data_eth_mac_t[6];
-
-/* ETH event definition */
-typedef struct {
-  data_eth_event_e  id;
-  data_eth_mac_t    mac;
-} data_eth_event_t;
 
 /* ETH IP definition */
 typedef struct {
@@ -127,7 +122,8 @@ typedef struct {
 /* ETH message payload */
 typedef struct {
   union {
-    data_eth_event_t  event;
+    data_eth_event_e  event_id;
+    data_eth_mac_t    mac;
     data_eth_info_t   info;
   } u;
 } payload_eth_t;
@@ -147,12 +143,19 @@ typedef struct {
 
 } payload_power_t;
 
+/* MQTT data definition */
+typedef struct {
+  data_topic_t  topic;
+  data_msg_t    msg;
+} data_mqtt_data_t;
 
 /* MQTT message payload */
 typedef struct {
-  data_mqtt_event_e event_id;
-  data_topic_t      topic;
-  data_msg_t        msg;
+  union {
+    data_mqtt_event_e event_id;
+    data_mqtt_data_t  data;
+    data_json_t       json;
+  } u;
 } payload_mqtt_t;
 
 /* Error message structure */
@@ -169,7 +172,6 @@ typedef struct {
   uint32_t        from;
   uint32_t        to;
   union {
-    payload_mgr_t     mgr;
     payload_eth_t     eth;
     payload_cli_t     cli;
     payload_gpio_t    gpio;

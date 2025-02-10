@@ -18,8 +18,11 @@
   _type == MSG_TYPE_MGR_LIST                  ? "MSG_TYPE_MGR_LIST"               : \
   _type == MSG_TYPE_ETH_EVENT                 ? "MSG_TYPE_ETH_EVENT"              : \
   _type == MSG_TYPE_ETH_IP                    ? "MSG_TYPE_ETH_IP"                 : \
+  _type == MSG_TYPE_MQTT_START                ? "MSG_TYPE_MQTT_START"             : \
   _type == MSG_TYPE_MQTT_EVENT                ? "MSG_TYPE_MQTT_EVENT"             : \
   _type == MSG_TYPE_MQTT_DATA                 ? "MSG_TYPE_MQTT_DATA"              : \
+  _type == MSG_TYPE_MQTT_PUBLISH              ? "MSG_TYPE_MQTT_PUBLISH"           : \
+  _type == MSG_TYPE_MQTT_SUBSCRIBE            ? "MSG_TYPE_MQTT_SUBSCRIBE"         : \
                                                 "MSG_TYPE_UNKNOWN"                  \
 )
 

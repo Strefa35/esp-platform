@@ -15,6 +15,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "cJSON.h"
+
 #include "mqtt_client.h"
 
 #include "sdkconfig.h"
@@ -52,24 +54,6 @@ static esp_mqtt_client_handle_t mqtt_client = NULL;
 static QueueHandle_t      mqtt_msg_queue = NULL;
 static TaskHandle_t       mqtt_task_id = NULL;
 
-/**
- * @brief Buffer to prepare topic
- * 
- * The buffer is used to prepare the topic. 
- * It consists of the following parts:
- * 
- *   UID/topic
- *      where:
- *        - UID - has 10 bytes: 'ESP_12AB34'
- *        - topic - has MQTT_TOPIC_LEN bytes: '/req/sys', /res/sys, /event/sys
- */
-static char     mqtt_topic_buffer[MQTT_TOPIC_MAX_LEN];
-
-static char     mqtt_uid_pattern[] = "ESP_%02X%02X%02X";
-static char     mqtt_uid[MQTT_UID_LEN + 1] = {}; /* keeps only UID, as: ESP_12AB34 */
-
-static char*    mqtt_uid_ptr    = &mqtt_topic_buffer[MQTT_UID_IDX];
-static char*    mqtt_topic_ptr  = &mqtt_topic_buffer[MQTT_TOPIC_IDX];
 
 /**
  * @brief MQTT event handler
@@ -81,11 +65,7 @@ static char*    mqtt_topic_ptr  = &mqtt_topic_buffer[MQTT_TOPIC_IDX];
  */
 static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data) {
   esp_mqtt_event_handle_t event = event_data;
-  msg_t msg = { 
-    .type = MSG_TYPE_MQTT_EVENT, 
-    .from = REG_MQTT_CTRL, 
-    .to   = REG_ALL_CTRL, 
-  };
+  msg_t msg;
   bool send = false;
 
   ESP_LOGI(TAG, "++%s(handler_args: %p, base: %s, event_id: %ld, event_data: %p)", __func__, handler_args, base ? base : "-", event_id, event_data);
@@ -93,7 +73,10 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
 
   switch (event->event_id) {
     case MQTT_EVENT_CONNECTED: {
-      msg.payload.mqtt.event_id = DATA_MQTT_EVENT_CONNECTED;
+      msg.type = MSG_TYPE_MQTT_EVENT;
+      msg.from = REG_MQTT_CTRL;
+      msg.to = REG_ALL_CTRL;
+      msg.payload.mqtt.u.event_id = DATA_MQTT_EVENT_CONNECTED;
       send = true;
       break;
     }
@@ -115,19 +98,19 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
       ESP_LOGI(TAG, " DATA: %.*s", event->data_len, event->data);
 
       msg.type = MSG_TYPE_MQTT_DATA;
+      msg.from = REG_MQTT_CTRL;
       msg.to = REG_MGR_CTRL;
-      msg.payload.mqtt.event_id = DATA_MQTT_EVENT_DATA;
 
       if ((event->topic_len < DATA_TOPIC_SIZE) && (event->data_len < DATA_MSG_SIZE)) {
-        strncpy(msg.payload.mqtt.topic, event->topic, event->topic_len);
-        strncpy(msg.payload.mqtt.msg, event->data, event->data_len);
+        strncpy(msg.payload.mqtt.u.data.topic, event->topic, event->topic_len);
+        strncpy(msg.payload.mqtt.u.data.msg, event->data, event->data_len);
+        send = true;
       } else {
         ESP_LOGE(TAG, "[%s] Size is too big -> topic: %d, data: %d", __func__,
             event->topic_len, event->data_len);
-        memset(msg.payload.mqtt.topic, 0x00, sizeof(data_topic_t));
-        memset(msg.payload.mqtt.msg, 0x00, sizeof(data_msg_t));
+        memset(msg.payload.mqtt.u.data.topic, 0x00, sizeof(data_topic_t));
+        memset(msg.payload.mqtt.u.data.msg, 0x00, sizeof(data_msg_t));
       }
-      send = true;
       break;
     }
     case MQTT_EVENT_ERROR: {
@@ -221,180 +204,71 @@ static esp_err_t mqttctrl_StopClient(void) {
   return result;
 }
 
-static esp_err_t mqttctrl_Subscribe(void) {
+static esp_err_t mqttctrl_Subscribe(const char* json_ptr) {
+  cJSON *root;
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGI(TAG, "++%s(json_ptr: '%s')", __func__, json_ptr);
 
-  /* Subscribe list of topics */
-  memset(mqtt_topic_ptr, 0x00, MQTT_TOPIC_LEN);
-  sprintf(mqtt_topic_ptr, "/cmd/sys");
-
-  int msg_id = esp_mqtt_client_subscribe(mqtt_client, mqtt_uid_ptr, 0);
-  ESP_LOGD(TAG, "[%s] SUBSCRIBE topic: '%s', msg_id: %d", __func__, mqtt_uid_ptr, msg_id);
-
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
-static esp_err_t mqttctrl_ParseEthPayload(const msg_type_e type, const payload_eth_t* eth) {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
-  switch (type) {
-    case MSG_TYPE_ETH_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, eth->u.event.id, GET_DATA_ETH_EVENT_NAME(eth->u.event.id));
-      if (eth->u.event.id == DATA_ETH_EVENT_CONNECTED) {
-#if 0
-        /* Clear topic buffer */
-        memset(mqtt_topic_buffer, 0x00, MQTT_TOPIC_MAX_LEN);
-        /* MAC address */
-        ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(eth->u.event.mac));
-
-        /* Create UID */
-        memcpy(mqtt_eth_mac, eth->u.event.mac, sizeof(eth->u.event.mac));
-        //memset(mqtt_uid, 0x00, sizeof(mqtt_uid));
-        sprintf(mqtt_uid, mqtt_uid_pattern, mqtt_eth_mac[3], mqtt_eth_mac[4], mqtt_eth_mac[5]);
-        sprintf(mqtt_uid_ptr, mqtt_uid_pattern, mqtt_eth_mac[3], mqtt_eth_mac[4], mqtt_eth_mac[5]);
-
-        ESP_LOGD(TAG, "[%s]     mqtt_uid: '%s'", __func__, mqtt_uid);
-        ESP_LOGD(TAG, "[%s] mqtt_uid_ptr: '%s'", __func__, mqtt_uid_ptr);
-#endif
+  root = cJSON_Parse(json_ptr);
+  if (root != NULL)
+  {
+    for (int idx = 0; idx < cJSON_GetArraySize(root); ++idx) {
+      char* topic = cJSON_GetStringValue(cJSON_GetArrayItem(root, idx));
+      if (topic) {
+        ESP_LOGD(TAG, "[%s] topic[idx=%d]: '%s'", __func__, idx, topic);
+        int msg_id = esp_mqtt_client_subscribe(mqtt_client, topic, 0);
+        ESP_LOGD(TAG, "[%s] SUBSCRIBE(topic: '%s') -> msg_id: %d", __func__, topic, msg_id);
       }
-      break;
     }
-
-    case MSG_TYPE_ETH_IP: {
-#if 0
-      uint8_t* addr = NULL;
-
-      addr = (uint8_t*) &(eth->u.info.ip);
-      ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
-        addr[0], addr[1], addr[2], addr[3]
-      );
-
-      addr = (uint8_t*) &(eth->u.info.mask);
-      ESP_LOGD(TAG, "[%s] MASK: %d.%d.%d.%d", __func__, 
-        addr[0], addr[1], addr[2], addr[3]
-      );
-
-      addr = (uint8_t*) &(eth->u.info.gw);
-      ESP_LOGD(TAG, "[%s]   GW: %d.%d.%d.%d", __func__, 
-        addr[0], addr[1], addr[2], addr[3]
-      );
-
-      result = mqttctrl_StartClient();
-      if (result != ESP_OK) {
-        ESP_LOGE(TAG, "[%s] mqttctrl_StartClient() - result: %d", __func__, result);
-      }
-#endif
-      break;
-    }
-    default: {
-      result = ESP_FAIL;
-      break;
-    }
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
-static esp_err_t mqttctrl_ParseMqttEvent(const esp_mqtt_event_id_t event_id) {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s(event_id: %d [%s])", __func__, event_id, GET_MQTT_EVENT_NAME(event_id));
-  switch (event_id) {
-    case DATA_MQTT_EVENT_CONNECTED: {
-      ESP_LOGD(TAG, "[%s] UID: %s", __func__, mqtt_uid);
-      
-      /* Notify MQTT Broker about client connected */
-      int msg_id = esp_mqtt_client_publish(mqtt_client, "REGISTER/event/register", mqtt_uid, 0, 1, 0);
-      ESP_LOGD(TAG, "[%s] PUBLISH message: '%s', msg_id: %d", __func__, mqtt_uid, msg_id);
-
-      /* Subscribe list of topics */
-      result = mqttctrl_Subscribe();
-      break;
-    }
-    default: {
-      result = ESP_FAIL;
-      break;
-    }
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
-static esp_err_t mqttctrl_ParseMgrPayload(const msg_type_e type, const payload_mgr_t* payload) {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
-  switch (type) {
-    case MSG_TYPE_MGR_LIST: {
-      ESP_LOGD(TAG, "[%s] List: '%s'", __func__, payload->msg);
-      break;
-    }
-    default: {
-      result = ESP_FAIL;
-      break;
-    }
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
-static esp_err_t mqttctrl_ParseMqttPayload(const msg_type_e type, const payload_mqtt_t* payload) {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_MSG_TYPE_NAME(type));
-  switch (type) {
-    case MSG_TYPE_MQTT_EVENT: {
-      ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, payload->event_id, GET_DATA_MQTT_EVENT_NAME(payload->event_id));
-
-      result = mqttctrl_ParseMqttEvent(payload->event_id);
-      break;
-    }
-    case MSG_TYPE_MQTT_DATA: {
-      ESP_LOGD(TAG, "[%s] Data", __func__);
-      break;
-    }
-    default: {
-      result = ESP_FAIL;
-      break;
-    }
+    cJSON_Delete(root);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
 static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
-  esp_err_t result = ESP_FAIL;
+  esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(type: %d [%s], from: 0x%08lx, to: 0x%08lx)", __func__, 
       msg->type, GET_MSG_TYPE_NAME(msg->type),
       msg->from, msg->to);
-  switch (msg->from) {
-    case REG_MGR_CTRL: {
-      result = mqttctrl_ParseMgrPayload(msg->type, &(msg->payload.mgr));
+
+  switch (msg->type) {
+    case MSG_TYPE_MQTT_START: {
+      result = mqttctrl_StartClient();
+      if (result != ESP_OK) {
+        ESP_LOGE(TAG, "[%s] mqttctrl_StartClient() - result: %d", __func__, result);
+      }
       break;
     }
-    case REG_ETH_CTRL: {
-      result = mqttctrl_ParseEthPayload(msg->type, &(msg->payload.eth));
+    case MSG_TYPE_MQTT_EVENT: {
+      data_mqtt_event_e event_id = msg->payload.mqtt.u.event_id;
+
+      ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, event_id, GET_DATA_MQTT_EVENT_NAME(event_id));
       break;
     }
-    case REG_CLI_CTRL: {
+    case MSG_TYPE_MQTT_DATA: {
+      ESP_LOGD(TAG, "[%s] data", __func__);
       break;
     }
-    case REG_GPIO_CTRL: {
+    case MSG_TYPE_MQTT_PUBLISH: {
+      const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
+
+      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, data_ptr->topic);
+      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, data_ptr->msg);
+      int msg_id = esp_mqtt_client_publish(mqtt_client, data_ptr->topic, data_ptr->msg, 0, 1, 0);
+      ESP_LOGD(TAG, "[%s] PUBLISH(topic: '%s', msg: '%s') -> msg_id: %d", __func__, 
+          data_ptr->topic, data_ptr->msg, msg_id);
       break;
     }
-    case REG_POWER_CTRL: {
-      break;
-    }
-    case REG_MQTT_CTRL: {
-      result = mqttctrl_ParseMqttPayload(msg->type, &(msg->payload.mqtt));
+    case MSG_TYPE_MQTT_SUBSCRIBE: {
+      const char* json_ptr = &(msg->payload.mqtt.u.json[0]);
+      result = mqttctrl_Subscribe(json_ptr);
       break;
     }
     default: {
+      result = ESP_FAIL;
       break;
     }
   }

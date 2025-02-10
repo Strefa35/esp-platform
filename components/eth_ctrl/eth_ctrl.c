@@ -92,42 +92,50 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
   /* we can get the ethernet driver handle from event data */
   esp_eth_handle_t eth_handle = *(esp_eth_handle_t *) event_data;
   msg_t msg = { 
-    .type = MSG_TYPE_ETH_EVENT, 
     .from = REG_ETH_CTRL, 
-    .to = REG_ALL_CTRL,
-    .payload.eth.u.event.id = event_id,
-    .payload.eth.u.event.mac = {0} 
+    .to = REG_MGR_CTRL,
   };
   bool send = true;
 
   switch (event_id) {
     case ETHERNET_EVENT_CONNECTED: {
-      //esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, mac_addr);
-      esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, msg.payload.eth.u.event.mac);
+      
+      /* Here, we have to send 2 times  */
+      /* - 1st time - event_id          */
+      /* - 2nd time - MAC address       */
+
+      /* 1st message */
+      msg.type = MSG_TYPE_ETH_EVENT;
+      msg.payload.eth.u.event_id = DATA_ETH_EVENT_CONNECTED;
+      esp_err_t result = MGR_Send(&msg);
+      ESP_LOGI(TAG, "1st -> MSG_Send() - result: %d", result);
+
+      /* 2nd message */
+      msg.type = MSG_TYPE_ETH_MAC;
+      esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, msg.payload.eth.u.mac);
       ESP_LOGI(TAG, "Ethernet Link Up");
       ESP_LOGI(TAG, "Ethernet HW Addr %02X:%02X:%02X:%02X:%02X:%02X",
-                msg.payload.eth.u.event.mac[0], 
-                msg.payload.eth.u.event.mac[1], 
-                msg.payload.eth.u.event.mac[2], 
-                msg.payload.eth.u.event.mac[3], 
-                msg.payload.eth.u.event.mac[4], 
-                msg.payload.eth.u.event.mac[5]);
-      msg.payload.eth.u.event.id = DATA_ETH_EVENT_CONNECTED;
+                msg.payload.eth.u.mac[0], 
+                msg.payload.eth.u.mac[1], 
+                msg.payload.eth.u.mac[2], 
+                msg.payload.eth.u.mac[3], 
+                msg.payload.eth.u.mac[4], 
+                msg.payload.eth.u.mac[5]);
       break;
     }
     case ETHERNET_EVENT_DISCONNECTED: {
       ESP_LOGI(TAG, "Ethernet Link Down");
-      msg.payload.eth.u.event.id = DATA_ETH_EVENT_DISCONNECTED;
+      msg.payload.eth.u.event_id = DATA_ETH_EVENT_DISCONNECTED;
       break;
     }
     case ETHERNET_EVENT_START: {
       ESP_LOGI(TAG, "Ethernet Started");
-      msg.payload.eth.u.event.id = DATA_ETH_EVENT_START;
+      msg.payload.eth.u.event_id = DATA_ETH_EVENT_START;
       break;
     }
     case ETHERNET_EVENT_STOP: {
       ESP_LOGI(TAG, "Ethernet Stopped");
-      msg.payload.eth.u.event.id = DATA_ETH_EVENT_STOP;
+      msg.payload.eth.u.event_id = DATA_ETH_EVENT_STOP;
       break;
     }
     default: {
@@ -150,7 +158,7 @@ static void ethctrl_IpEventHandler(void *arg, esp_event_base_t event_base,
   msg_t msg = { 
     .type = MSG_TYPE_ETH_IP, 
     .from = REG_ETH_CTRL, 
-    .to = REG_ALL_CTRL
+    .to = REG_MGR_CTRL
   };
 
   ESP_LOGI(TAG, "Ethernet Got IP Address");
