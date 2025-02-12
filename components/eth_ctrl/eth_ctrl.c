@@ -31,6 +31,8 @@
 #include "mgr_ctrl.h"
 
 #include "lut.h"
+#include "eth_lut.h"
+
 
 #if CONFIG_ETH_CTRL_USE_SPI_ETHERNET
   #include "driver/spi_master.h"
@@ -96,7 +98,9 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
     .to = REG_MGR_CTRL,
   };
   bool send = true;
+  esp_err_t result;
 
+  ESP_LOGI(TAG, "++%s(event_id: %ld [%s], event_data: %p)", __func__, event_id, GET_ETHERNET_EVENT_NAME(event_id), event_data);
   switch (event_id) {
     case ETHERNET_EVENT_CONNECTED: {
       
@@ -107,7 +111,7 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
       /* 1st message */
       msg.type = MSG_TYPE_ETH_EVENT;
       msg.payload.eth.u.event_id = DATA_ETH_EVENT_CONNECTED;
-      esp_err_t result = MGR_Send(&msg);
+      result = MGR_Send(&msg);
       ESP_LOGI(TAG, "1st -> MSG_Send() - result: %d", result);
 
       /* 2nd message */
@@ -144,7 +148,7 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
     }
   }
   if (send) {
-    esp_err_t result = MGR_Send(&msg);
+    result = MGR_Send(&msg);
     ESP_LOGI(TAG, "MSG_Send() - result: %d", result);
   }
 }

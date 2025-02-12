@@ -30,6 +30,7 @@
 #include "lut.h"
 #include "mqtt_lut.h"
 
+
 /* Temporary Broker URL - should be taken from NVM */
 #define CONFIG_BROKER_URL       "mqtt://10.0.0.10"
 
@@ -111,6 +112,9 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
         memset(msg.payload.mqtt.u.data.topic, 0x00, sizeof(data_topic_t));
         memset(msg.payload.mqtt.u.data.msg, 0x00, sizeof(data_msg_t));
       }
+      break;
+    }
+    case MQTT_EVENT_BEFORE_CONNECT: {
       break;
     }
     case MQTT_EVENT_ERROR: {
@@ -204,21 +208,45 @@ static esp_err_t mqttctrl_StopClient(void) {
   return result;
 }
 
+static esp_err_t mqttctrl_Publish(const char* topic, const char* msg) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(topic: '%s', msg: '%s')", __func__, topic, msg);
+  int msg_id = esp_mqtt_client_publish(mqtt_client, topic, msg, 0, 1, 0);
+  ESP_LOGD(TAG, "[%s] PUBLISH(topic: '%s', msg: '%s') -> msg_id: %d", __func__,
+      topic, msg, msg_id);
+  if (msg_id == -1) {
+    result = ESP_FAIL;
+  } else if (msg_id == -2) {
+    result = ESP_ERR_NO_MEM;
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t mqttctrl_Subscribe(const char* json_ptr) {
   cJSON *root;
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(json_ptr: '%s')", __func__, json_ptr);
-
   root = cJSON_Parse(json_ptr);
   if (root != NULL)
   {
-    for (int idx = 0; idx < cJSON_GetArraySize(root); ++idx) {
-      char* topic = cJSON_GetStringValue(cJSON_GetArrayItem(root, idx));
+    cJSON* list = cJSON_GetObjectItem(root, "topics");
+    for (int idx = 0; idx < cJSON_GetArraySize(list); ++idx) {
+      char* topic = cJSON_GetStringValue(cJSON_GetArrayItem(list, idx));
       if (topic) {
         ESP_LOGD(TAG, "[%s] topic[idx=%d]: '%s'", __func__, idx, topic);
         int msg_id = esp_mqtt_client_subscribe(mqtt_client, topic, 0);
         ESP_LOGD(TAG, "[%s] SUBSCRIBE(topic: '%s') -> msg_id: %d", __func__, topic, msg_id);
+        if (msg_id == -1) {
+          result = ESP_FAIL;
+        } else if (msg_id == -2) {
+          result = ESP_ERR_NO_MEM;
+        }
+        if (result != ESP_OK) {
+          break;
+        }
       }
     }
     cJSON_Delete(root);
@@ -255,15 +283,12 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
     case MSG_TYPE_MQTT_PUBLISH: {
       const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
 
-      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, data_ptr->topic);
-      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, data_ptr->msg);
-      int msg_id = esp_mqtt_client_publish(mqtt_client, data_ptr->topic, data_ptr->msg, 0, 1, 0);
-      ESP_LOGD(TAG, "[%s] PUBLISH(topic: '%s', msg: '%s') -> msg_id: %d", __func__, 
-          data_ptr->topic, data_ptr->msg, msg_id);
+      result = mqttctrl_Publish(data_ptr->topic, data_ptr->msg);
       break;
     }
     case MSG_TYPE_MQTT_SUBSCRIBE: {
-      const char* json_ptr = &(msg->payload.mqtt.u.json[0]);
+      const char* json_ptr = msg->payload.mqtt.u.json;
+
       result = mqttctrl_Subscribe(json_ptr);
       break;
     }

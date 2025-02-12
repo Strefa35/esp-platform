@@ -100,9 +100,9 @@ typedef enum {
 */
 
 
-#define DATA_TOPIC_SIZE     20
-#define DATA_MSG_SIZE       100
-#define DATA_JSON_SIZE      150
+#define DATA_TOPIC_SIZE     (20U)
+#define DATA_MSG_SIZE       (100U)
+#define DATA_JSON_SIZE      (150U)
 
 
 typedef char data_topic_t[DATA_TOPIC_SIZE];
