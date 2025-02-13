@@ -40,6 +40,7 @@ typedef enum {
   MSG_TYPE_MQTT_DATA,
   MSG_TYPE_MQTT_PUBLISH,
   MSG_TYPE_MQTT_SUBSCRIBE,
+  MSG_TYPE_MQTT_SUBSCRIBE_LIST,
 
 } msg_type_e;
 
@@ -128,7 +129,7 @@ typedef enum {
 */
 
 
-#define DATA_TOPIC_SIZE     (20U)
+#define DATA_TOPIC_SIZE     (25U)
 #define DATA_MSG_SIZE       (100U)
 #define DATA_JSON_SIZE      (150U)
 
@@ -181,6 +182,7 @@ typedef struct {
 typedef struct {
   union {
     data_mqtt_event_e event_id;
+    data_topic_t      topic;
     data_mqtt_data_t  data;
     data_json_t       json;
   } u;

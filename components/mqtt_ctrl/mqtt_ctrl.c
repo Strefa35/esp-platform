@@ -226,7 +226,23 @@ static esp_err_t mqttctrl_Publish(const char* topic, const char* msg) {
   return result;
 }
 
-static esp_err_t mqttctrl_Subscribe(const char* json_ptr) {
+static esp_err_t mqttctrl_SubscribeTopic(const char* topic) {
+  cJSON *root;
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(topic: '%s')", __func__, topic);
+  int msg_id = esp_mqtt_client_subscribe(mqtt_client, topic, 0);
+  ESP_LOGD(TAG, "[%s] SUBSCRIBE(topic: '%s') -> msg_id: %d", __func__, topic, msg_id);
+  if (msg_id == -1) {
+    result = ESP_FAIL;
+  } else if (msg_id == -2) {
+    result = ESP_ERR_NO_MEM;
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_SubscribeList(const char* json_ptr) {
   cJSON *root;
   esp_err_t result = ESP_OK;
 
@@ -300,9 +316,11 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
       break;
     }
     case MSG_TYPE_MQTT_SUBSCRIBE: {
-      const char* json_ptr = msg->payload.mqtt.u.json;
-
-      result = mqttctrl_Subscribe(json_ptr);
+      result = mqttctrl_SubscribeTopic(msg->payload.mqtt.u.topic);
+      break;
+    }
+    case MSG_TYPE_MQTT_SUBSCRIBE_LIST: {
+      result = mqttctrl_SubscribeList(msg->payload.mqtt.u.json);
       break;
     }
     default: {
