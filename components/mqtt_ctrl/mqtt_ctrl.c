@@ -27,6 +27,7 @@
 #include "mgr_ctrl.h"
 #include "mqtt_ctrl.h"
 
+#include "err.h"
 #include "lut.h"
 #include "mqtt_lut.h"
 
@@ -54,6 +55,7 @@ static esp_mqtt_client_handle_t mqtt_client = NULL;
 
 static QueueHandle_t      mqtt_msg_queue = NULL;
 static TaskHandle_t       mqtt_task_id = NULL;
+static SemaphoreHandle_t  mqtt_sem_id = NULL;
 
 
 /**
@@ -261,8 +263,19 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
   ESP_LOGI(TAG, "++%s(type: %d [%s], from: 0x%08lx, to: 0x%08lx)", __func__, 
       msg->type, GET_MSG_TYPE_NAME(msg->type),
       msg->from, msg->to);
-
   switch (msg->type) {
+    case MSG_TYPE_INIT: {
+      result = ESP_TASK_INIT;
+      break;
+    }
+    case MSG_TYPE_DONE: {
+      result = ESP_TASK_DONE;
+      break;
+    }
+    case MSG_TYPE_RUN: {
+      result = ESP_TASK_RUN;
+      break;
+    }
     case MSG_TYPE_MQTT_START: {
       result = mqttctrl_StartClient();
       if (result != ESP_OK) {
@@ -321,6 +334,10 @@ static void mqttctrl_TaskFn(void* param) {
           msg.from, msg.to);
       
       result = mqttctrl_ParseMsg(&msg);
+      if (result == ESP_TASK_DONE) {
+        loop = false;
+        result = ESP_OK;
+      }
 
       if (result != ESP_OK) {
         // TODO - Send Error to the Broker
@@ -330,10 +347,25 @@ static void mqttctrl_TaskFn(void* param) {
       ESP_LOGE(TAG, "[%s] Message error.", __func__);
     }
   }
+  if (mqtt_sem_id) {
+    xSemaphoreGive(mqtt_sem_id);
+  }
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
-esp_err_t mqttctrl_Init(void) {
+static esp_err_t mqttctrl_Send(const msg_t* msg) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (xQueueSend(mqtt_msg_queue, msg, (TickType_t) 0) != pdPASS) {
+    ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg->type, msg->from, msg->to);
+    result = ESP_FAIL;
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
@@ -346,7 +378,14 @@ esp_err_t mqttctrl_Init(void) {
     return ESP_FAIL;
   }
 
-  /* Initialization manager thread */
+  mqtt_sem_id = xSemaphoreCreateCounting(1, 0);
+  if (mqtt_sem_id == NULL)
+  {
+    ESP_LOGE(TAG, "[%s] xSemaphoreCreateCounting() failed.", __func__);
+    return ESP_FAIL;
+  }
+
+  /* Initialization MQTT thread */
   xTaskCreate(mqttctrl_TaskFn, MQTT_TASK_NAME, MQTT_TASK_STACK_SIZE, NULL, MQTT_TASK_PRIORITY, &mqtt_task_id);
   if (mqtt_task_id == NULL)
   {
@@ -364,12 +403,25 @@ esp_err_t mqttctrl_Init(void) {
   return result;
 }
 
-esp_err_t mqttctrl_Done(void) {
+static esp_err_t mqttctrl_Done(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
   result = mqttctrl_DoneClient();
-  if (mqtt_task_id) {
+  if (mqtt_sem_id) {
+    msg_t msg = {
+      .type = MSG_TYPE_DONE,
+      .from = REG_MQTT_CTRL,
+      .to = REG_MQTT_CTRL,
+    };
+    result = mqttctrl_Send(&msg);
+  
+    ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake to finish task...", __func__);
+    xSemaphoreTake(mqtt_sem_id, portMAX_DELAY);
+
+    vSemaphoreDelete(mqtt_sem_id);
+    ESP_LOGD(TAG, "[%s] Semaphore deleted", __func__);
+
     ESP_LOGD(TAG, "[%s] Task stopped", __func__);
   }
   if (mqtt_msg_queue) {
@@ -380,7 +432,7 @@ esp_err_t mqttctrl_Done(void) {
   return result;
 }
 
-esp_err_t mqttctrl_Run(void) {
+static esp_err_t mqttctrl_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
@@ -432,7 +484,7 @@ esp_err_t MqttCtrl_Run(void) {
 }
 
 /**
- * @brief Sent message to the MQTT controller thread
+ * @brief Send message to the MQTT controller thread
  * 
  * \return esp_err_t 
  */
@@ -440,10 +492,7 @@ esp_err_t MqttCtrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  if (xQueueSend(mqtt_msg_queue, msg, (TickType_t) 0) != pdPASS) {
-    ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg->type, msg->from, msg->to);
-    result = ESP_FAIL;
-  }
+  result = mqttctrl_Send(msg);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

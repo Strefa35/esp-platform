@@ -26,6 +26,7 @@
 
 #include "mgr_reg_list.h"
 
+#include "err.h"
 #include "lut.h"
 
 
@@ -297,6 +298,18 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       msg->from, msg->to);
 
   switch (msg->type) {
+    case MSG_TYPE_INIT: {
+      result = ESP_TASK_INIT;
+      break;
+    }
+    case MSG_TYPE_DONE: {
+      result = ESP_TASK_DONE;
+      break;
+    }
+    case MSG_TYPE_RUN: {
+      result = ESP_TASK_RUN;
+      break;
+    }
 
     case MSG_TYPE_ETH_EVENT: {
       data_eth_event_e event_id = msg->payload.eth.u.event_id;
@@ -403,6 +416,11 @@ static void mgr_TaskFn(void* param) {
       /* First, parse message in manager */
       if (msg.to & REG_MGR_CTRL) {
         result = mgr_ParseMsg(&msg);
+      }
+
+      if (result == ESP_TASK_DONE) {
+        loop = false;
+        result = ESP_OK;
       }
 
       /* Now, notify specific (or all) registered controller */

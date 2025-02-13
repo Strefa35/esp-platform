@@ -43,6 +43,22 @@ void app_main(void) {
   esp_log_level_set(POWER_CTRL_TAG, CONFIG_POWER_CTRL_LOG_LEVEL);
 #endif
 
+#ifdef CONFIG_RELAY_CTRL_ENABLE
+  esp_log_level_set(RELAY_CTRL_TAG, CONFIG_RELAY_CTRL_LOG_LEVEL);
+#endif
+
+#ifdef CONFIG_CFG_CTRL_ENABLE
+  esp_log_level_set(CFG_CTRL_TAG, CONFIG_CFG_CTRL_LOG_LEVEL);
+#endif
+
+#ifdef CONFIG_SYS_CTRL_ENABLE
+  esp_log_level_set(SYS_CTRL_TAG, CONFIG_SYS_CTRL_LOG_LEVEL);
+#endif
+
+#ifdef CONFIG_CLI_CTRL_ENABLE
+  esp_log_level_set(CLI_CTRL_TAG, CONFIG_CLI_CTRL_LOG_LEVEL);
+#endif
+
 #ifdef CONFIG_MQTT_CTRL_ENABLE
   esp_log_level_set(MQTT_CTRL_TAG, CONFIG_MQTT_CTRL_LOG_LEVEL);
 #endif

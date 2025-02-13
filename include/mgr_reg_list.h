@@ -17,16 +17,28 @@
   #include "eth_ctrl.h"
 #endif
 
-#ifdef CONFIG_CLI_CTRL_ENABLE
-
-#endif
-
 #ifdef CONFIG_GPIO_CTRL_ENABLE
-
+  #include "gpio_ctrl.h"
 #endif
 
 #ifdef CONFIG_POWER_CTRL_ENABLE
+  #include "power_ctrl.h"
+#endif
 
+#ifdef CONFIG_RELAY_CTRL_ENABLE
+  #include "relay_ctrl.h"
+#endif
+
+#ifdef CONFIG_CFG_CTRL_ENABLE
+  #include "cfg_ctrl.h"
+#endif
+
+#ifdef CONFIG_SYS_CTRL_ENABLE
+  #include "sys_ctrl.h"
+#endif
+
+#ifdef CONFIG_CLI_CTRL_ENABLE
+  #include "cli_ctrl.h"
 #endif
 
 #ifdef CONFIG_TEMPLATE_CTRL_ENABLE
@@ -50,30 +62,51 @@ static mgr_reg_t mgr_reg_list[] = {
   },
 #endif
 
-#ifdef CONFIG_CLI_CTRL_ENABLE
-  {
-    "cli", REG_CLI_CTRL,
-    NULL, NULL, NULL, NULL
-  },
-#endif
-
 #ifdef CONFIG_GPIO_CTRL_ENABLE
   {
-    "gpio", MSG_CTRL_GPIO,
-    NULL, NULL, NULL, NULL
+    "gpio", REG_GPIO_CTRL,
+    GpioCtrl_Init, GpioCtrl_Done, GpioCtrl_Run, GpioCtrl_Send
   },
 #endif
 
 #ifdef CONFIG_POWER_CTRL_ENABLE
   {
     "power", REG_POWER_CTRL,
-    NULL, NULL, NULL, NULL
+    PowerCtrl_Init, PowerCtrl_Done, PowerCtrl_Run, PowerCtrl_Send
+  },
+#endif
+
+#ifdef CONFIG_RELAY_CTRL_ENABLE
+  {
+    "relay", REG_POWER_CTRL,
+    RelayCtrl_Init, RelayCtrl_Done, RelayCtrl_Run, RelayCtrl_Send
+  },
+#endif
+
+#ifdef CONFIG_CFG_CTRL_ENABLE
+  {
+    "cfg", REG_CFG_CTRL,
+    CfgCtrl_Init, CfgCtrl_Done, CfgCtrl_Run, CfgCtrl_Send
+  },
+#endif
+
+#ifdef CONFIG_SYS_CTRL_ENABLE
+  {
+    "sys", REG_SYS_CTRL,
+    SysCtrl_Init, SysCtrl_Done, SysCtrl_Run, CfgCtrl_Send
+  },
+#endif
+
+#ifdef CONFIG_CLI_CTRL_ENABLE
+  {
+    "cli", REG_CLI_CTRL,
+    CliCtrl_Init, CliCtrl_Done, CliCtrl_Run, CliCtrl_Send
   },
 #endif
 
 #ifdef CONFIG_TEMPLATE_CTRL_ENABLE
   {
-    "template", MSG_TEMPLATE_CTRL,
+    "template", MSG_XXX_CTRL,
     TemplateCtrl_Init, TemplateCtrl_Done, TemplateCtrl_Run, TemplateCtrl_Send
   },
 #endif

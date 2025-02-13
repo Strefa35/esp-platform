@@ -1,9 +1,9 @@
 /**
- * @file template_ctrl.c
+ * @file sys_ctrl.c
  * @author A.Czerwinski@pistacje.net
- * @brief Template Controller
+ * @brief System Controller
  * @version 0.1
- * @date 2025-01-31
+ * @date 2025-02-12
  * 
  * @copyright Copyright (c) 2025 4Embedded.Systems
  * 
@@ -21,28 +21,28 @@
 
 #include "err.h"
 #include "msg.h"
-#include "template_ctrl.h"
+#include "sys_ctrl.h"
 
 #include "err.h"
 #include "lut.h"
 
 
-#define TEMPLATE_TASK_NAME          "template-task"
-#define TEMPLATE_TASK_STACK_SIZE    4096
-#define TEMPLATE_TASK_PRIORITY      10
+#define SYS_TASK_NAME          "sys-task"
+#define SYS_TASK_STACK_SIZE    4096
+#define SYS_TASK_PRIORITY      10
 
-#define TEMPLATE_MSG_MAX            40
-
-
-static const char* TAG = TEMPLATE_CTRL_TAG;
+#define SYS_MSG_MAX            40
 
 
-static QueueHandle_t      template_msg_queue = NULL;
-static TaskHandle_t       template_task_id = NULL;
-static SemaphoreHandle_t  template_sem_id = NULL;
+static const char* TAG = SYS_CTRL_TAG;
 
 
-static esp_err_t templatectrl_ParseMsg(const msg_t* msg) {
+static QueueHandle_t      sys_msg_queue = NULL;
+static TaskHandle_t       sys_task_id = NULL;
+static SemaphoreHandle_t  sys_sem_id = NULL;
+
+
+static esp_err_t sysctrl_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(type: %d [%s], from: 0x%08lx, to: 0x%08lx)", __func__, 
@@ -72,11 +72,11 @@ static esp_err_t templatectrl_ParseMsg(const msg_t* msg) {
 }
 
 /**
- * @brief Template task's function
+ * @brief System task's function
  * 
  * @param param 
  */
-static void templatectrl_TaskFn(void* param) {
+static void sysctrl_TaskFn(void* param) {
   msg_t msg;
   bool loop = true;
   esp_err_t result;
@@ -85,12 +85,12 @@ static void templatectrl_TaskFn(void* param) {
   memset(&msg, 0x00, sizeof(msg_t));
   while (loop) {
     ESP_LOGD(TAG, "[%s] Wait...", __func__);
-    if(xQueueReceive(template_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
+    if(xQueueReceive(sys_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
       ESP_LOGD(TAG, "[%s] Message arrived: type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
           msg.type, GET_MSG_TYPE_NAME(msg.type),
           msg.from, msg.to);
       
-      result = templatectrl_ParseMsg(&msg);
+      result = sysctrl_ParseMsg(&msg);
       if (result == ESP_TASK_DONE) {
         loop = false;
         result = ESP_OK;
@@ -104,17 +104,17 @@ static void templatectrl_TaskFn(void* param) {
       ESP_LOGE(TAG, "[%s] Message error.", __func__);
     }
   }
-  if (template_sem_id) {
-    xSemaphoreGive(template_sem_id);
+  if (sys_sem_id) {
+    xSemaphoreGive(sys_sem_id);
   }
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
-static esp_err_t templatectrl_Send(const msg_t* msg) {
+static esp_err_t sysctrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  if (xQueueSend(template_msg_queue, msg, (TickType_t) 0) != pdPASS) {
+  if (xQueueSend(sys_msg_queue, msg, (TickType_t) 0) != pdPASS) {
     ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg->type, msg->from, msg->to);
     result = ESP_FAIL;
   }
@@ -122,29 +122,29 @@ static esp_err_t templatectrl_Send(const msg_t* msg) {
   return result;
 }
 
-static esp_err_t templatectrl_Init(void) {
+static esp_err_t sysctrl_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
   /* Initialization message queue */
-  template_msg_queue = xQueueCreate(TEMPLATE_MSG_MAX, sizeof(msg_t));
-  if (template_msg_queue == NULL)
+  sys_msg_queue = xQueueCreate(SYS_MSG_MAX, sizeof(msg_t));
+  if (sys_msg_queue == NULL)
   {
     ESP_LOGE(TAG, "[%s] xQueueCreate() failed.", __func__);
     return ESP_FAIL;
   }
 
-  template_sem_id = xSemaphoreCreateCounting(1, 0);
-  if (template_sem_id == NULL)
+  sys_sem_id = xSemaphoreCreateCounting(1, 0);
+  if (sys_sem_id == NULL)
   {
     ESP_LOGE(TAG, "[%s] xSemaphoreCreateCounting() failed.", __func__);
     return ESP_FAIL;
   }
 
   /* Initialization thread */
-  xTaskCreate(templatectrl_TaskFn, TEMPLATE_TASK_NAME, TEMPLATE_TASK_STACK_SIZE, NULL, TEMPLATE_TASK_PRIORITY, &template_task_id);
-  if (template_task_id == NULL)
+  xTaskCreate(sysctrl_TaskFn, SYS_TASK_NAME, SYS_TASK_STACK_SIZE, NULL, SYS_TASK_PRIORITY, &sys_task_id);
+  if (sys_task_id == NULL)
   {
     ESP_LOGE(TAG, "[%s] xTaskCreate() failed.", __func__);
     return ESP_FAIL;
@@ -154,35 +154,35 @@ static esp_err_t templatectrl_Init(void) {
   return result;
 }
 
-static esp_err_t templatectrl_Done(void) {
+static esp_err_t sysctrl_Done(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  if (template_sem_id) {
+  if (sys_sem_id) {
     msg_t msg = {
       .type = MSG_TYPE_DONE,
-      .from = REG_XXX_CTRL,
-      .to = REG_XXX_CTRL,
+      .from = REG_SYS_CTRL,
+      .to = REG_SYS_CTRL,
     };
-    result = templatectrl_Send(&msg);
+    result = sysctrl_Send(&msg);
 
     ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake to finish task...", __func__);
-    xSemaphoreTake(template_sem_id, portMAX_DELAY);
+    xSemaphoreTake(sys_sem_id, portMAX_DELAY);
 
-    vSemaphoreDelete(template_sem_id);
+    vSemaphoreDelete(sys_sem_id);
     ESP_LOGD(TAG, "[%s] Semaphore deleted", __func__);
 
     ESP_LOGD(TAG, "[%s] Task stopped", __func__);
   }
-  if (template_msg_queue) {
-    vQueueDelete(template_msg_queue);
+  if (sys_msg_queue) {
+    vQueueDelete(sys_msg_queue);
     ESP_LOGD(TAG, "[%s] Queue deleted", __func__);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
-static esp_err_t templatectrl_Run(void) {
+static esp_err_t sysctrl_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
@@ -192,57 +192,57 @@ static esp_err_t templatectrl_Run(void) {
 }
 
 /**
- * @brief Init Template controller
+ * @brief Init System controller
  * 
  * \return esp_err_t 
  */
-esp_err_t TemplateCtrl_Init(void) {
+esp_err_t SysCtrl_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  result = templatectrl_Init();
+  result = sysctrl_Init();
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
 /**
- * @brief Done Template controller
+ * @brief Done System controller
  * 
  * \return esp_err_t 
  */
-esp_err_t TemplateCtrl_Done(void) {
+esp_err_t SysCtrl_Done(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  result = templatectrl_Done();
+  result = sysctrl_Done();
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
 /**
- * @brief Run Template controller
+ * @brief Run System controller
  * 
  * \return esp_err_t 
  */
-esp_err_t TemplateCtrl_Run(void) {
+esp_err_t SysCtrl_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  result = templatectrl_Run();
+  result = sysctrl_Run();
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
 /**
- * @brief Send message to the Template controller thread
+ * @brief Send message to the System controller thread
  * 
  * \return esp_err_t 
  */
-esp_err_t TemplateCtrl_Send(const msg_t* msg) {
+esp_err_t SysCtrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  result = templatectrl_Send(msg);
+  result = sysctrl_Send(msg);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

@@ -6,3 +6,6 @@ sdkconfig.old
 
 #Visual Studio Code folder
 .vscode
+
+# Others
+dependiences.lock

@@ -21,6 +21,11 @@
 
 /* Message type definition */
 typedef enum {
+  /* Control signals for all modules */
+  MSG_TYPE_INIT,
+  MSG_TYPE_DONE,
+  MSG_TYPE_RUN,
+
   /* MGR module */
   MSG_TYPE_MGR_LIST,
 
@@ -74,18 +79,41 @@ typedef enum {
 /* [1st byte]==========[8 bits]============= */
 #define REG_MGR_CTRL    (1 << 0)
 #define REG_ETH_CTRL    (1 << 1)
-#define REG_CLI_CTRL    (1 << 2)
-#define REG_GPIO_CTRL   (1 << 3)
-/* ----------[4 bits]------------- */
-#define REG_POWER_CTRL  (1 << 4)
-#define REG_MQTT_CTRL   (1 << 5)
+#define REG_MQTT_CTRL   (1 << 2)
+//#define REG_XXX_CTRL    (1 << 3)
+//#define REG_XXX_CTRL    (1 << 4)
+//#define REG_XXX_CTRL    (1 << 5)
+//#define REG_XXX_CTRL    (1 << 6)
+//#define REG_XXX_CTRL    (1 << 7)
 
 /* [2nd byte]==========[8 bits]============= */
+#define REG_GPIO_CTRL   (1 << 8)
+#define REG_POWER_CTRL  (1 << 9)
+#define REG_RELAY_CTRL  (1 << 10)
+//#define REG_XXX_CTRL    (1 << 11)
+//#define REG_XXX_CTRL    (1 << 12)
+//#define REG_XXX_CTRL    (1 << 13)
+//#define REG_XXX_CTRL    (1 << 14)
+//#define REG_XXX_CTRL    (1 << 15)
 
 /* [3rd byte]==========[8 bits]============= */
+#define REG_CFG_CTRL    (1 << 16)
+#define REG_SYS_CTRL    (1 << 17)
+#define REG_CLI_CTRL    (1 << 18)
+//#define REG_XXX_CTRL    (1 << 19)
+//#define REG_XXX_CTRL    (1 << 20)
+//#define REG_XXX_CTRL    (1 << 21)
+//#define REG_XXX_CTRL    (1 << 22)
+#define REG_XXX_CTRL    (1 << 23) /* Only for using TemplateCtrl module as example */
 
 /* [4th byte]==========[8 bits]============= */
 /*   Control bits                            */
+//#define REG_XXX_CTRL    (1 << 24)
+//#define REG_XXX_CTRL    (1 << 25)
+//#define REG_XXX_CTRL    (1 << 26)
+//#define REG_XXX_CTRL    (1 << 27)
+//#define REG_XXX_CTRL    (1 << 28)
+//#define REG_XXX_CTRL    (1 << 29)
 
 /* Can't communicate with them from the outside */
 #define REG_INT_CTRL    (1 << 30)   /* Internal Controller  */

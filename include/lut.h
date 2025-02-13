@@ -15,8 +15,12 @@
 #include "msg.h"
 
 #define GET_MSG_TYPE_NAME(_type) ( \
+  _type == MSG_TYPE_INIT                      ? "MSG_TYPE_INIT"                   : \
+  _type == MSG_TYPE_DONE                      ? "MSG_TYPE_DONE"                   : \
+  _type == MSG_TYPE_RUN                       ? "MSG_TYPE_RUN"                    : \
   _type == MSG_TYPE_MGR_LIST                  ? "MSG_TYPE_MGR_LIST"               : \
   _type == MSG_TYPE_ETH_EVENT                 ? "MSG_TYPE_ETH_EVENT"              : \
+  _type == MSG_TYPE_ETH_MAC                   ? "MSG_TYPE_ETH_MAC"                : \
   _type == MSG_TYPE_ETH_IP                    ? "MSG_TYPE_ETH_IP"                 : \
   _type == MSG_TYPE_MQTT_START                ? "MSG_TYPE_MQTT_START"             : \
   _type == MSG_TYPE_MQTT_EVENT                ? "MSG_TYPE_MQTT_EVENT"             : \
