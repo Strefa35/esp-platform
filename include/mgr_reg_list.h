@@ -78,7 +78,7 @@ static mgr_reg_t mgr_reg_list[] = {
 
 #ifdef CONFIG_RELAY_CTRL_ENABLE
   {
-    "relay", REG_POWER_CTRL,
+    "relay", REG_RELAY_CTRL,
     RelayCtrl_Init, RelayCtrl_Done, RelayCtrl_Run, RelayCtrl_Send
   },
 #endif

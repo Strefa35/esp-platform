@@ -107,6 +107,8 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
       if ((event->topic_len < DATA_TOPIC_SIZE) && (event->data_len < DATA_MSG_SIZE)) {
         strncpy(msg.payload.mqtt.u.data.topic, event->topic, event->topic_len);
         strncpy(msg.payload.mqtt.u.data.msg, event->data, event->data_len);
+        msg.payload.mqtt.u.data.topic[event->topic_len] = 0;
+        msg.payload.mqtt.u.data.msg[event->data_len] = 0;
         send = true;
       } else {
         ESP_LOGE(TAG, "[%s] Size is too big -> topic: %d, data: %d", __func__,

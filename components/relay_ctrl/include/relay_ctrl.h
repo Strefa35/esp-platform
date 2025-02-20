@@ -17,6 +17,9 @@
 
 #include "esp_err.h"
 
+#include "msg.h"
+
+
 esp_err_t RelayCtrl_Init(void);
 esp_err_t RelayCtrl_Done(void);
 esp_err_t RelayCtrl_Run(void);

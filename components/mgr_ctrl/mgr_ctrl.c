@@ -68,12 +68,12 @@ static data_eth_info_t    mgr_eth_info = {};
  *   UID/topic
  *      where:
  *        - UID - has 10 bytes: 'ESP_12AB34'
- *        - topic - has MQTT_TOPIC_LEN bytes: '/req/sys', /res/sys, /event/sys
+ *        - topic - has MQTT_TOPIC_LEN bytes: '/sys'
  */
 static char     mgr_topic_buffer[MGR_TOPIC_MAX_LEN];
 
 static char     mgr_uid_pattern[]   = "ESP_%02X%02X%02X";
-static char     mgr_topic_pattern[] = "%s/%s/%s";
+static char     mgr_topic_pattern[] = "%s/%s";
 
 static char     mgr_uid[MGR_UID_LEN + 1] = {}; /* keeps only UID, as: ESP_12AB34 */
 
@@ -240,7 +240,8 @@ void mgr_SubscribeTopic(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
   if (mgr_send_to_mqtt_fn) {
     for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-      sprintf(mgr_topic_list[idx].topic, mgr_topic_pattern, mgr_uid, "cmd", mgr_reg_list[idx].name);
+      mgr_topic_list[idx].type = mgr_reg_list[idx].type;
+      sprintf(mgr_topic_list[idx].topic, mgr_topic_pattern, mgr_uid, mgr_reg_list[idx].name);
       sprintf(msg.payload.mqtt.u.topic, "%s", mgr_topic_list[idx].topic);
       esp_err_t result = mgr_send_to_mqtt_fn(&msg);
       if (result != ESP_OK) {
@@ -278,7 +279,7 @@ void mgr_SubscribeList(void) {
 
       for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
         mgr_topic_list[idx].type = mgr_reg_list[idx].type;
-        sprintf(mgr_topic_list[idx].topic, mgr_topic_pattern, mgr_uid, "cmd", mgr_reg_list[idx].name);
+        sprintf(mgr_topic_list[idx].topic, mgr_topic_pattern, mgr_uid, mgr_reg_list[idx].name);
         cJSON_AddItemToArray(list, cJSON_CreateString(mgr_topic_list[idx].topic));
       }
 
@@ -329,14 +330,39 @@ static esp_err_t mgr_parseMqttEvent(data_mqtt_event_e event_id) {
   return result;
 }
 
-static esp_err_t mgr_ParseMqttData(const char* topic, const char* msg) {
-  esp_err_t result = ESP_OK;
+static esp_err_t mgr_ParseMqttData(const msg_t* msg) {
+  const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
+  esp_err_t result = ESP_ERR_NOT_FOUND;
 
-  ESP_LOGI(TAG, "++%s(topic: '%s', msg: '%s')", __func__, topic, msg);
+  ESP_LOGI(TAG, "++%s(topic: '%s', msg: '%s')", __func__, data_ptr->topic, data_ptr->msg);
 
-  /* Find msg_type_e from the topic */
-  /* and call send_fn() for it      */
+  /* topic must be grater than UID len + at least 4 bytes: */
+  /* UID + '/' + module name:  e.g. ESP_12AB34/123 */
+  if (strlen(data_ptr->topic) < (MGR_UID_LEN + 4)) {
+    ESP_LOGE(TAG, "[%s] topic: '%s' too short, size: %d", __func__, data_ptr->topic, strlen(data_ptr->topic));
+    return ESP_ERR_INVALID_SIZE;
+  }
 
+  /* Check UID in the topic */
+  if (memcmp(data_ptr->topic, mgr_uid, MGR_UID_LEN) != 0) {
+    ESP_LOGE(TAG, "[%s] topic: '%s' doesn't contain UID: '%s'", __func__, data_ptr->topic, mgr_uid);
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  /* Gets module name and call send_fn() if module was found */
+  ESP_LOGD(TAG, "[%s] Find a module: '%s'", __func__, &(data_ptr->topic[MGR_UID_LEN + 1]));
+  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+    ESP_LOGD(TAG, "[%s] Registered module: '%s' on idx: %d", __func__, mgr_reg_list[idx].name, idx);
+    if (memcmp(&(data_ptr->topic[MGR_UID_LEN + 1]), mgr_reg_list[idx].name, strlen(mgr_reg_list[idx].name)) == 0) {
+      ESP_LOGD(TAG, "[%s] Module '%s' found.", __func__, mgr_reg_list[idx].name);
+      if (mgr_reg_list[idx].send_fn) {
+        result = mgr_reg_list[idx].send_fn(msg);
+      } else {
+        result = ESP_FAIL;
+      }
+      break;
+    }
+  }
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -413,11 +439,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       break;
     }
     case MSG_TYPE_MQTT_DATA: {
-      const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
-
-      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, data_ptr->topic);
-      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, data_ptr->msg);
-      result = mgr_ParseMqttData(data_ptr->topic, data_ptr->msg);
+      result = mgr_ParseMqttData(msg);
       break;
     }
 
