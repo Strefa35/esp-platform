@@ -130,8 +130,8 @@ typedef enum {
 
 
 #define DATA_TOPIC_SIZE     (25U)
-#define DATA_MSG_SIZE       (100U)
-#define DATA_JSON_SIZE      (150U)
+#define DATA_MSG_SIZE       (250U)
+#define DATA_JSON_SIZE      (350U)
 
 
 typedef char data_topic_t[DATA_TOPIC_SIZE];
