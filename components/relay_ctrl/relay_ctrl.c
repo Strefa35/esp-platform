@@ -34,7 +34,7 @@
 #define RELAY_TASK_STACK_SIZE     4096
 #define RELAY_TASK_PRIORITY       10
 
-#define RELAY_MSG_MAX             40
+#define RELAY_MSG_MAX             10
 
 #define RELAY_NUMBER_MIN          0
 #define RELAY_NUMBER_MAX          1
