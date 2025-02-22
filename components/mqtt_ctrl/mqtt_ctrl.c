@@ -39,7 +39,7 @@
 #define MQTT_TASK_STACK_SIZE    4096
 #define MQTT_TASK_PRIORITY      10
 
-#define MQTT_MSG_MAX            40
+#define MQTT_MSG_MAX            10
 
 #define MQTT_TOPIC_MAX_LEN      (32U)
 #define MQTT_UID_LEN            (10U)
@@ -97,24 +97,34 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
       break;
     }
     case MQTT_EVENT_DATA: {
-      ESP_LOGI(TAG, "TOPIC: %.*s", event->topic_len, event->topic);
-      ESP_LOGI(TAG, " DATA: %.*s", event->data_len, event->data);
-
       msg.type = MSG_TYPE_MQTT_DATA;
       msg.from = REG_MQTT_CTRL;
       msg.to = REG_MGR_CTRL;
 
+      ESP_LOGI(TAG, "TOPIC: [%3d] '%s'", event->topic_len, event->topic);
+      ESP_LOGI(TAG, " DATA: [%3d] '%s'", event->data_len, event->data);
+
+      /* Add NULL at the end of buffer */
+      event->topic[event->topic_len] = 0;
+      event->data[event->data_len] = 0;
+
+      /* remove all unnecessary characters */
+      cJSON_Minify(event->data);
+
+      /* Set length with NULL */
+      event->topic_len = strlen(event->topic);
+      event->data_len = strlen(event->data);
+
+      ESP_LOGI(TAG, "TOPIC: [%3d] '%s'", event->topic_len, event->topic);
+      ESP_LOGI(TAG, " DATA: [%3d] '%s'", event->data_len, event->data);
+
       if ((event->topic_len < DATA_TOPIC_SIZE) && (event->data_len < DATA_MSG_SIZE)) {
-        strncpy(msg.payload.mqtt.u.data.topic, event->topic, event->topic_len);
-        strncpy(msg.payload.mqtt.u.data.msg, event->data, event->data_len);
-        msg.payload.mqtt.u.data.topic[event->topic_len] = 0;
-        msg.payload.mqtt.u.data.msg[event->data_len] = 0;
+        memcpy(msg.payload.mqtt.u.data.topic, event->topic, event->topic_len);
+        memcpy(msg.payload.mqtt.u.data.msg, event->data, event->data_len);
         send = true;
       } else {
         ESP_LOGE(TAG, "[%s] Size is too big -> topic: %d, data: %d", __func__,
             event->topic_len, event->data_len);
-        memset(msg.payload.mqtt.u.data.topic, 0x00, sizeof(data_topic_t));
-        memset(msg.payload.mqtt.u.data.msg, 0x00, sizeof(data_msg_t));
       }
       break;
     }
@@ -229,7 +239,6 @@ static esp_err_t mqttctrl_Publish(const char* topic, const char* msg) {
 }
 
 static esp_err_t mqttctrl_SubscribeTopic(const char* topic) {
-  cJSON *root;
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(topic: '%s')", __func__, topic);
