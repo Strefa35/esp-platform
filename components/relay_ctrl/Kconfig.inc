@@ -1,6 +1,14 @@
-menu "RELAY Controller Log Level"
+menu "RELAY Controller"
+
+    config RELAY_CTRL_ENABLE
+        bool "Enable Relay Controller"
+        default "n"
+        help
+            Enable Relay Controller to use by the Manager
+
     choice RELAY_CTRL_LOG_LEVEL
-        bool "RELAY log verbosity"
+        depends on RELAY_CTRL_ENABLE
+        bool "Log level"
         default RELAY_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.
@@ -29,6 +37,7 @@ menu "RELAY Controller Log Level"
     endchoice
 
     config RELAY_CTRL_LOG_LEVEL
+        depends on RELAY_CTRL_ENABLE
         int
         default 0 if RELAY_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if RELAY_CTRL_LOG_DEFAULT_LEVEL_ERROR
@@ -36,4 +45,5 @@ menu "RELAY Controller Log Level"
         default 3 if RELAY_CTRL_LOG_DEFAULT_LEVEL_INFO
         default 4 if RELAY_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if RELAY_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
+
 endmenu

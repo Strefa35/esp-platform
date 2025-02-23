@@ -1,6 +1,14 @@
-menu "CLI Controller Log Level"
+menu "CLI Controller"
+
+    config CLI_CTRL_ENABLE
+        bool "Enable CLI Controller"
+        default "n"
+        help
+            Enable CLI Controller to use by the Manager
+
     choice CLI_CTRL_LOG_LEVEL
-        bool "CLI log verbosity"
+        depends on CLI_CTRL_ENABLE
+        bool "Log level"
         default CLI_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.
@@ -29,6 +37,7 @@ menu "CLI Controller Log Level"
     endchoice
 
     config CLI_CTRL_LOG_LEVEL
+        depends on CLI_CTRL_ENABLE
         int
         default 0 if CLI_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if CLI_CTRL_LOG_DEFAULT_LEVEL_ERROR
@@ -36,4 +45,5 @@ menu "CLI Controller Log Level"
         default 3 if CLI_CTRL_LOG_DEFAULT_LEVEL_INFO
         default 4 if CLI_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if CLI_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
+
 endmenu

@@ -1,6 +1,14 @@
-menu "MQTT Controller Log Level"
+menu "MQTT Controller"
+
+    config MQTT_CTRL_ENABLE
+        bool "Enable MQTT Controller"
+        default "y"
+        help
+            Enable MQTT Controller to use by the Manager
+
     choice MQTT_CTRL_LOG_LEVEL
-        bool "MQTT log verbosity"
+        depends on MQTT_CTRL_ENABLE
+        bool "Log level"
         default MQTT_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.
@@ -29,6 +37,7 @@ menu "MQTT Controller Log Level"
     endchoice
 
     config MQTT_CTRL_LOG_LEVEL
+        depends on MQTT_CTRL_ENABLE
         int
         default 0 if MQTT_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if MQTT_CTRL_LOG_DEFAULT_LEVEL_ERROR
@@ -36,4 +45,5 @@ menu "MQTT Controller Log Level"
         default 3 if MQTT_CTRL_LOG_DEFAULT_LEVEL_INFO
         default 4 if MQTT_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if MQTT_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
+
 endmenu

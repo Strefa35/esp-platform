@@ -1,59 +1,7 @@
 menu "Heater Controller - Manager"
 
-    orsource "./Kconfig.level"
+    orsource "Kconfig.inc"
 
-    config ETH_CTRL_ENABLE
-        bool "Enable Ethernet Controller"
-        default "y"
-        help
-            Enable Ethernet Controller to use by the Manager
-
-    config MQTT_CTRL_ENABLE
-        bool "Enable MQTT Controller"
-        default "y"
-        help
-            Enable MQTT Controller to use by the Manager
-
-    config GPIO_CTRL_ENABLE
-        bool "Enable GPIO Controller"
-        default "n"
-        help
-            Enable GPIO Controller to use by the Manager
-
-    config POWER_CTRL_ENABLE
-        bool "Enable Power Controller"
-        default "n"
-        help
-            Enable Power Controller to use by the Manager
-
-    config RELAY_CTRL_ENABLE
-        bool "Enable Relay Controller"
-        default "n"
-        help
-            Enable Relay Controller to use by the Manager
-
-    config CFG_CTRL_ENABLE
-        bool "Enable CFG Controller"
-        default "n"
-        help
-            Enable CFG Controller to use by the Manager
-
-    config SYS_CTRL_ENABLE
-        bool "Enable SYS Controller"
-        default "n"
-        help
-            Enable SYS Controller to use by the Manager
-
-    config CLI_CTRL_ENABLE
-        bool "Enable CLI Controller"
-        default "n"
-        help
-    	    Enable CLI Controller to use by the Manager
-
-    config TEMPLATE_CTRL_ENABLE
-        bool "Enable Template Controller"
-        default "n"
-        help
-            Enable Template Controller to use by the Manager
+    orsource "../components/Kconfig.inc"
 
 endmenu

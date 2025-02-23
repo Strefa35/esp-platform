@@ -1,6 +1,14 @@
-menu "SYS Controller Log Level"
+menu "SYS Controller"
+
+    config SYS_CTRL_ENABLE
+        bool "Enable SYS Controller"
+        default "n"
+        help
+            Enable SYS Controller to use by the Manager
+
     choice SYS_CTRL_LOG_LEVEL
-        bool "SYS log verbosity"
+        depends on SYS_CTRL_ENABLE
+        bool "Log level"
         default SYS_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.
@@ -29,6 +37,7 @@ menu "SYS Controller Log Level"
     endchoice
 
     config SYS_CTRL_LOG_LEVEL
+        depends on SYS_CTRL_ENABLE
         int
         default 0 if SYS_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if SYS_CTRL_LOG_DEFAULT_LEVEL_ERROR
@@ -36,4 +45,5 @@ menu "SYS Controller Log Level"
         default 3 if SYS_CTRL_LOG_DEFAULT_LEVEL_INFO
         default 4 if SYS_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if SYS_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
+
 endmenu

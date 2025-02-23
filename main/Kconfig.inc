@@ -1,6 +1,7 @@
-menu "Main Log Level"
+menu "MAIN"
+
     choice MAIN_LOG_LEVEL
-        bool "MAIN log verbosity"
+        bool "Log level"
         default MAIN_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.

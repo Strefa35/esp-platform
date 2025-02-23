@@ -42,6 +42,8 @@ typedef enum {
   MSG_TYPE_MQTT_SUBSCRIBE,
   MSG_TYPE_MQTT_SUBSCRIBE_LIST,
 
+  MSG_TYPE_LCD_DATA,
+
 } msg_type_e;
 
 /* ETH state definition */
@@ -91,7 +93,7 @@ typedef enum {
 #define REG_GPIO_CTRL   (1 << 8)
 #define REG_POWER_CTRL  (1 << 9)
 #define REG_RELAY_CTRL  (1 << 10)
-//#define REG_XXX_CTRL    (1 << 11)
+#define REG_LCD_CTRL    (1 << 11)
 //#define REG_XXX_CTRL    (1 << 12)
 //#define REG_XXX_CTRL    (1 << 13)
 //#define REG_XXX_CTRL    (1 << 14)

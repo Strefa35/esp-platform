@@ -29,6 +29,10 @@
   #include "relay_ctrl.h"
 #endif
 
+#ifdef CONFIG_LCD_CTRL_ENABLE
+  #include "lcd_ctrl.h"
+#endif
+
 #ifdef CONFIG_CFG_CTRL_ENABLE
   #include "cfg_ctrl.h"
 #endif
@@ -80,6 +84,13 @@ static mgr_reg_t mgr_reg_list[] = {
   {
     "relay", REG_RELAY_CTRL,
     RelayCtrl_Init, RelayCtrl_Done, RelayCtrl_Run, RelayCtrl_Send
+  },
+#endif
+
+#ifdef CONFIG_LCD_CTRL_ENABLE
+  {
+    "lcd", REG_LCD_CTRL,
+    LcdCtrl_Init, LcdCtrl_Done, LcdCtrl_Run, LcdCtrl_Send
   },
 #endif
 

@@ -1,6 +1,14 @@
-menu "CFG Controller Log Level"
+menu "CFG Controller"
+
+    config CFG_CTRL_ENABLE
+        bool "Enable CFG Controller"
+        default "n"
+        help
+            Enable CFG Controller to use by the Manager
+
     choice CFG_CTRL_LOG_LEVEL
-        bool "CFG log verbosity"
+        depends on CFG_CTRL_ENABLE
+        bool "Log level"
         default CFG_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.
@@ -29,6 +37,7 @@ menu "CFG Controller Log Level"
     endchoice
 
     config CFG_CTRL_LOG_LEVEL
+        depends on CFG_CTRL_ENABLE
         int
         default 0 if CFG_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if CFG_CTRL_LOG_DEFAULT_LEVEL_ERROR
@@ -36,4 +45,5 @@ menu "CFG Controller Log Level"
         default 3 if CFG_CTRL_LOG_DEFAULT_LEVEL_INFO
         default 4 if CFG_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if CFG_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
+
 endmenu

@@ -8,3 +8,4 @@ sdkconfig.old
 .vscode
 
 # Others
+managed_components

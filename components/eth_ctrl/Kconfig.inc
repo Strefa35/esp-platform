@@ -1,6 +1,14 @@
-menu "ETH Controller Log Level"
+menu "ETH Controller"
+
+    config ETH_CTRL_ENABLE
+        bool "Enable Ethernet Controller"
+        default "y"
+        help
+            Enable Ethernet Controller to use by the Manager
+
     choice ETH_CTRL_LOG_LEVEL
-        bool "ETH log verbosity"
+        depends on ETH_CTRL_ENABLE
+        bool "Log level"
         default ETH_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.
@@ -29,6 +37,7 @@ menu "ETH Controller Log Level"
     endchoice
 
     config ETH_CTRL_LOG_LEVEL
+        depends on ETH_CTRL_ENABLE
         int
         default 0 if ETH_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if ETH_CTRL_LOG_DEFAULT_LEVEL_ERROR
@@ -36,4 +45,5 @@ menu "ETH Controller Log Level"
         default 3 if ETH_CTRL_LOG_DEFAULT_LEVEL_INFO
         default 4 if ETH_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if ETH_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
+
 endmenu

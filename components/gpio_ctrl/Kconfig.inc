@@ -1,6 +1,14 @@
-menu "GPIO Controller Log Level"
+menu "GPIO Controller"
+
+    config GPIO_CTRL_ENABLE
+        bool "Enable GPIO Controller"
+        default "n"
+        help
+            Enable GPIO Controller to use by the Manager
+
     choice GPIO_CTRL_LOG_LEVEL
-        bool "GPIO log verbosity"
+        depends on GPIO_CTRL_ENABLE
+        bool "Log level"
         default GPIO_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.
@@ -29,6 +37,7 @@ menu "GPIO Controller Log Level"
     endchoice
 
     config GPIO_CTRL_LOG_LEVEL
+        depends on GPIO_CTRL_ENABLE
         int
         default 0 if GPIO_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if GPIO_CTRL_LOG_DEFAULT_LEVEL_ERROR
@@ -36,4 +45,5 @@ menu "GPIO Controller Log Level"
         default 3 if GPIO_CTRL_LOG_DEFAULT_LEVEL_INFO
         default 4 if GPIO_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if GPIO_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
+
 endmenu

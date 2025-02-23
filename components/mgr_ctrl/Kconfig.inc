@@ -1,6 +1,7 @@
-menu "MGR Control Log Level"
+menu "MGR Control"
+
     choice MGR_CTRL_LOG_LEVEL
-        bool "MGR log verbosity"
+        bool "Log level"
         default MGR_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
             Specify how much output to see in logs by default.
@@ -36,4 +37,5 @@ menu "MGR Control Log Level"
         default 3 if MGR_CTRL_LOG_DEFAULT_LEVEL_INFO
         default 4 if MGR_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if MGR_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
+
 endmenu
