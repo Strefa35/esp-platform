@@ -17,8 +17,6 @@
 
 #include "sdkconfig.h"
 
-#include "tags.h"
-
 #include "err.h"
 #include "msg.h"
 #include "cli_ctrl.h"
@@ -27,14 +25,14 @@
 #include "lut.h"
 
 
-#define CLI_TASK_NAME          "cli-task"
-#define CLI_TASK_STACK_SIZE    4096
-#define CLI_TASK_PRIORITY      10
+#define CLI_TASK_NAME           "cli-task"
+#define CLI_TASK_STACK_SIZE     4096
+#define CLI_TASK_PRIORITY       12
 
-#define CLI_MSG_MAX            40
+#define CLI_MSG_MAX             10
 
 
-static const char* TAG = CLI_CTRL_TAG;
+static const char* TAG = "ESP::CLI";
 
 
 static QueueHandle_t      cli_msg_queue = NULL;
@@ -198,6 +196,8 @@ static esp_err_t clictrl_Run(void) {
  */
 esp_err_t CliCtrl_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_CLI_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
   result = clictrl_Init();

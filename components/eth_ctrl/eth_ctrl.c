@@ -24,8 +24,6 @@
 
 #include "sdkconfig.h"
 
-#include "tags.h"
-
 #include "msg.h"
 #include "eth_ctrl.h"
 #include "mgr_ctrl.h"
@@ -38,7 +36,7 @@
   #include "driver/spi_master.h"
 #endif // CONFIG_ETH_CTRL_USE_SPI_ETHERNET
 
-static const char* TAG = ETH_CTRL_TAG;
+static const char* TAG = "ESP::ETH";
 
 
 #if CONFIG_ETH_CTRL_SPI_ETHERNETS_NUM

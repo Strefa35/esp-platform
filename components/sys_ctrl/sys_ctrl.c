@@ -17,8 +17,6 @@
 
 #include "sdkconfig.h"
 
-#include "tags.h"
-
 #include "err.h"
 #include "msg.h"
 #include "sys_ctrl.h"
@@ -27,14 +25,14 @@
 #include "lut.h"
 
 
-#define SYS_TASK_NAME          "sys-task"
-#define SYS_TASK_STACK_SIZE    4096
-#define SYS_TASK_PRIORITY      10
+#define SYS_TASK_NAME           "sys-task"
+#define SYS_TASK_STACK_SIZE     4096
+#define SYS_TASK_PRIORITY       12
 
-#define SYS_MSG_MAX            40
+#define SYS_MSG_MAX             10
 
 
-static const char* TAG = SYS_CTRL_TAG;
+static const char* TAG = "ESP::SYS";
 
 
 static QueueHandle_t      sys_msg_queue = NULL;
@@ -198,6 +196,8 @@ static esp_err_t sysctrl_Run(void) {
  */
 esp_err_t SysCtrl_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_SYS_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
   result = sysctrl_Init();

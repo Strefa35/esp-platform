@@ -19,8 +19,6 @@
 
 #include "sdkconfig.h"
 
-#include "tags.h"
-
 #include "mgr_ctrl.h"
 #include "mgr_reg.h"
 
@@ -32,7 +30,7 @@
 
 #define MGR_TASK_NAME           "mgr-task"
 #define MGR_TASK_STACK_SIZE     4096
-#define MGR_TASK_PRIORITY       10
+#define MGR_TASK_PRIORITY       8
 
 #define MGR_MSG_MAX             40
 
@@ -46,7 +44,7 @@
 #define MGR_TOPIC_IDX           (10U)
 
 
-static const char* TAG = MGR_CTRL_TAG;
+static const char* TAG = "ESP::MGR";
 
 
 static int mgr_modules_cnt = MGR_REG_LIST_CNT;
@@ -523,6 +521,8 @@ static void mgr_TaskFn(void* param) {
  */
 esp_err_t MGR_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_MGR_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
 

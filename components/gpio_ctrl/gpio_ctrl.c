@@ -17,9 +17,6 @@
 
 #include "sdkconfig.h"
 
-#include "tags.h"
-
-#include "err.h"
 #include "msg.h"
 #include "gpio_ctrl.h"
 
@@ -27,14 +24,14 @@
 #include "lut.h"
 
 
-#define GPIO_TASK_NAME          "gpio-task"
-#define GPIO_TASK_STACK_SIZE    4096
-#define GPIO_TASK_PRIORITY      10
+#define GPIO_TASK_NAME            "gpio-task"
+#define GPIO_TASK_STACK_SIZE      4096
+#define GPIO_TASK_PRIORITY        12
 
-#define GPIO_MSG_MAX            40
+#define GPIO_MSG_MAX              10
 
 
-static const char* TAG = GPIO_CTRL_TAG;
+static const char* TAG = "ESP::GPIO";
 
 
 static QueueHandle_t      gpio_msg_queue = NULL;
@@ -198,6 +195,8 @@ static esp_err_t gpioctrl_Run(void) {
  */
 esp_err_t GpioCtrl_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_GPIO_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
   result = gpioctrl_Init();

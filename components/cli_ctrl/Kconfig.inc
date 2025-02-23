@@ -7,7 +7,6 @@ menu "CLI Controller"
             Enable CLI Controller to use by the Manager
 
     choice CLI_CTRL_LOG_LEVEL
-        depends on CLI_CTRL_ENABLE
         bool "Log level"
         default CLI_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
@@ -37,7 +36,6 @@ menu "CLI Controller"
     endchoice
 
     config CLI_CTRL_LOG_LEVEL
-        depends on CLI_CTRL_ENABLE
         int
         default 0 if CLI_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if CLI_CTRL_LOG_DEFAULT_LEVEL_ERROR

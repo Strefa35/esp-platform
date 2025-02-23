@@ -21,8 +21,6 @@
 
 #include "driver/gpio.h"
 
-#include "tags.h"
-
 #include "msg.h"
 #include "relay_ctrl.h"
 
@@ -32,7 +30,7 @@
 
 #define RELAY_TASK_NAME           "relay-task"
 #define RELAY_TASK_STACK_SIZE     4096
-#define RELAY_TASK_PRIORITY       10
+#define RELAY_TASK_PRIORITY       12
 
 #define RELAY_MSG_MAX             10
 
@@ -44,7 +42,7 @@
 
 #define GPIO_OUTPUT_PIN_SEL       ((1ULL << RELAY_0) | (1ULL << RELAY_1))
 
-static const char* TAG = RELAY_CTRL_TAG;
+static const char* TAG = "ESP::RELAY";
 
 
 static QueueHandle_t      relay_msg_queue = NULL;
@@ -357,6 +355,8 @@ static esp_err_t relayctrl_Run(void) {
  */
 esp_err_t RelayCtrl_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_RELAY_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
   result = relayctrl_Init();

@@ -7,7 +7,6 @@ menu "RELAY Controller"
             Enable Relay Controller to use by the Manager
 
     choice RELAY_CTRL_LOG_LEVEL
-        depends on RELAY_CTRL_ENABLE
         bool "Log level"
         default RELAY_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
@@ -37,7 +36,6 @@ menu "RELAY Controller"
     endchoice
 
     config RELAY_CTRL_LOG_LEVEL
-        depends on RELAY_CTRL_ENABLE
         int
         default 0 if RELAY_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if RELAY_CTRL_LOG_DEFAULT_LEVEL_ERROR

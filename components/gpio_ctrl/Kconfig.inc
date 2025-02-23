@@ -7,7 +7,6 @@ menu "GPIO Controller"
             Enable GPIO Controller to use by the Manager
 
     choice GPIO_CTRL_LOG_LEVEL
-        depends on GPIO_CTRL_ENABLE
         bool "Log level"
         default GPIO_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
@@ -37,7 +36,6 @@ menu "GPIO Controller"
     endchoice
 
     config GPIO_CTRL_LOG_LEVEL
-        depends on GPIO_CTRL_ENABLE
         int
         default 0 if GPIO_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if GPIO_CTRL_LOG_DEFAULT_LEVEL_ERROR

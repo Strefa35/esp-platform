@@ -7,7 +7,6 @@ menu "Template Controller"
             Enable Template Controller to use by the Manager
 
     choice TEMPLATE_CTRL_LOG_LEVEL
-        depends on TEMPLATE_CTRL_ENABLE
         bool "Log level"
         default TEMPLATE_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
@@ -37,7 +36,6 @@ menu "Template Controller"
     endchoice
 
     config TEMPLATE_CTRL_LOG_LEVEL
-        depends on TEMPLATE_CTRL_ENABLE
         int
         default 0 if TEMPLATE_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if TEMPLATE_CTRL_LOG_DEFAULT_LEVEL_ERROR

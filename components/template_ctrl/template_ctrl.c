@@ -17,8 +17,6 @@
 
 #include "sdkconfig.h"
 
-#include "tags.h"
-
 #include "err.h"
 #include "msg.h"
 #include "template_ctrl.h"
@@ -29,12 +27,12 @@
 
 #define TEMPLATE_TASK_NAME          "template-task"
 #define TEMPLATE_TASK_STACK_SIZE    4096
-#define TEMPLATE_TASK_PRIORITY      10
+#define TEMPLATE_TASK_PRIORITY      12
 
-#define TEMPLATE_MSG_MAX            40
+#define TEMPLATE_MSG_MAX            10
 
 
-static const char* TAG = TEMPLATE_CTRL_TAG;
+static const char* TAG = "ESP::TEMPLATE";
 
 
 static QueueHandle_t      template_msg_queue = NULL;
@@ -198,6 +196,8 @@ static esp_err_t templatectrl_Run(void) {
  */
 esp_err_t TemplateCtrl_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_TEMPLATE_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
   result = templatectrl_Init();

@@ -21,8 +21,6 @@
 
 #include "sdkconfig.h"
 
-#include "tags.h"
-
 #include "msg.h"
 #include "mgr_ctrl.h"
 #include "mqtt_ctrl.h"
@@ -37,7 +35,7 @@
 
 #define MQTT_TASK_NAME          "mqtt-task"
 #define MQTT_TASK_STACK_SIZE    4096
-#define MQTT_TASK_PRIORITY      10
+#define MQTT_TASK_PRIORITY      9
 
 #define MQTT_MSG_MAX            10
 
@@ -49,7 +47,7 @@
 #define MQTT_TOPIC_IDX          (10U)
 
 
-static const char* TAG = MQTT_CTRL_TAG;
+static const char* TAG = "ESP::MQTT";
 
 static esp_mqtt_client_handle_t mqtt_client = NULL;
 
@@ -477,6 +475,8 @@ static esp_err_t mqttctrl_Run(void) {
  */
 esp_err_t MqttCtrl_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_MQTT_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
   result = mqttctrl_Init();

@@ -7,7 +7,6 @@ menu "CFG Controller"
             Enable CFG Controller to use by the Manager
 
     choice CFG_CTRL_LOG_LEVEL
-        depends on CFG_CTRL_ENABLE
         bool "Log level"
         default CFG_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
@@ -37,7 +36,6 @@ menu "CFG Controller"
     endchoice
 
     config CFG_CTRL_LOG_LEVEL
-        depends on CFG_CTRL_ENABLE
         int
         default 0 if CFG_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if CFG_CTRL_LOG_DEFAULT_LEVEL_ERROR

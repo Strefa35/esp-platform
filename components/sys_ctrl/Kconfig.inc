@@ -7,7 +7,6 @@ menu "SYS Controller"
             Enable SYS Controller to use by the Manager
 
     choice SYS_CTRL_LOG_LEVEL
-        depends on SYS_CTRL_ENABLE
         bool "Log level"
         default SYS_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
@@ -37,7 +36,6 @@ menu "SYS Controller"
     endchoice
 
     config SYS_CTRL_LOG_LEVEL
-        depends on SYS_CTRL_ENABLE
         int
         default 0 if SYS_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if SYS_CTRL_LOG_DEFAULT_LEVEL_ERROR

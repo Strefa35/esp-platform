@@ -7,7 +7,6 @@ menu "ETH Controller"
             Enable Ethernet Controller to use by the Manager
 
     choice ETH_CTRL_LOG_LEVEL
-        depends on ETH_CTRL_ENABLE
         bool "Log level"
         default ETH_CTRL_LOG_DEFAULT_LEVEL_INFO
         help
@@ -37,7 +36,6 @@ menu "ETH Controller"
     endchoice
 
     config ETH_CTRL_LOG_LEVEL
-        depends on ETH_CTRL_ENABLE
         int
         default 0 if ETH_CTRL_LOG_DEFAULT_LEVEL_NONE
         default 1 if ETH_CTRL_LOG_DEFAULT_LEVEL_ERROR

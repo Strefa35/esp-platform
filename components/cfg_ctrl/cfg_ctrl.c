@@ -17,8 +17,6 @@
 
 #include "sdkconfig.h"
 
-#include "tags.h"
-
 #include "err.h"
 #include "msg.h"
 #include "cfg_ctrl.h"
@@ -27,14 +25,14 @@
 #include "lut.h"
 
 
-#define CFG_TASK_NAME          "cfg-task"
-#define CFG_TASK_STACK_SIZE    4096
-#define CFG_TASK_PRIORITY      10
+#define CFG_TASK_NAME           "cfg-task"
+#define CFG_TASK_STACK_SIZE     4096
+#define CFG_TASK_PRIORITY       12
 
-#define CFG_MSG_MAX            40
+#define CFG_MSG_MAX             10
 
 
-static const char* TAG = CFG_CTRL_TAG;
+static const char* TAG = "EPS::CFG";
 
 
 static QueueHandle_t      cfg_msg_queue = NULL;
@@ -198,6 +196,8 @@ static esp_err_t cfgctrl_Run(void) {
  */
 esp_err_t CfgCtrl_Init(void) {
   esp_err_t result = ESP_OK;
+
+  esp_log_level_set(TAG, CONFIG_CFG_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
   result = cfgctrl_Init();
