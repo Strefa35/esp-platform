@@ -2,7 +2,7 @@ menu "RELAY Controller"
 
     config RELAY_CTRL_ENABLE
         bool "Enable Relay Controller"
-        default "n"
+        default "y"
         help
             Enable Relay Controller to use by the Manager
 
