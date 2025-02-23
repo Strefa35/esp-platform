@@ -62,11 +62,11 @@ static esp_err_t relayctrl_Configure(void) {
   gpio.pull_down_en = 0;
   gpio.pull_up_en = 0;
   
-  gpio_config(&gpio);
-
-  gpio_set_level(RELAY_0, 0);
-  gpio_set_level(RELAY_1, 0);
-
+  result = gpio_config(&gpio);
+  if (result == ESP_OK) {
+    gpio_set_level(RELAY_0, 0);
+    gpio_set_level(RELAY_1, 0);
+  }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
