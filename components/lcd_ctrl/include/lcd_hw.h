@@ -1,7 +1,7 @@
 /**
- * @file ili9341v.h
+ * @file lcd_hw.h
  * @author A.Czerwinski@pistacje.net
- * @brief TFT LCD Single Chip Driver
+ * @brief LCD Hardware
  * @version 0.1
  * @date 2025-02-23
  * 
@@ -9,9 +9,8 @@
  * 
  */
 
-#ifndef __ILI9341V_H__
-#define __ILI9341V_H__
-
+#ifndef __LCD_HW_H__
+#define __LCD_HW_H__
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -21,6 +20,6 @@
 #include "lcd_defs.h"
 
 
-esp_err_t lcd_InitDisplayHw(lcd_t* lcd_ptr);
+esp_err_t lcd_InitHw(lcd_t* lcd_ptr);
 
-#endif /* __ILI9341V_H__ */
+#endif /* __LCD_HW_H__ */

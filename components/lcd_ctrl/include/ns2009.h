@@ -1,7 +1,7 @@
 /**
- * @file ili9341v.h
+ * @file ns2009.h
  * @author A.Czerwinski@pistacje.net
- * @brief TFT LCD Single Chip Driver
+ * @brief Touch Screen Controller Driver
  * @version 0.1
  * @date 2025-02-23
  * 
@@ -9,8 +9,8 @@
  * 
  */
 
-#ifndef __ILI9341V_H__
-#define __ILI9341V_H__
+#ifndef __NS2009_H__
+#define __NS2009_H__
 
 
 #include <stdio.h>
@@ -20,7 +20,6 @@
 
 #include "lcd_defs.h"
 
+esp_err_t lcd_InitTouchHw(lcd_t* lcd_ptr);
 
-esp_err_t lcd_InitDisplayHw(lcd_t* lcd_ptr);
-
-#endif /* __ILI9341V_H__ */
+#endif /* __NS2009_H__ */

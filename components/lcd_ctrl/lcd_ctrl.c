@@ -21,6 +21,7 @@
 #include "msg.h"
 #include "lcd_ctrl.h"
 
+#include "lcd_hw.h"
 #include "lcd_helper.h"
 
 #include "err.h"
@@ -127,6 +128,12 @@ static esp_err_t lcdctrl_Init(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
+  result = lcd_InitHelper();
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] lcd_InitHelper() result: %d.", __func__, result);
+    return result;
+  }
+
   /* Initialization message queue */
   lcd_msg_queue = xQueueCreate(LCD_MSG_MAX, sizeof(msg_t));
   if (lcd_msg_queue == NULL)
@@ -149,8 +156,6 @@ static esp_err_t lcdctrl_Init(void) {
     ESP_LOGE(TAG, "[%s] xTaskCreate() failed.", __func__);
     return ESP_FAIL;
   }
-
-  result = lcd_InitHelper();
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;

@@ -53,10 +53,13 @@
 
 static const char* TAG = "ESP::LCD::ILI9341V";
 
-static esp_err_t lcd_InitDisplayHw(void) {
+static esp_err_t lcd_SetupDisplayHw(lcd_t* lcd_ptr) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+
+  lcd_ptr->h_res = LCD_H_RES;
+  lcd_ptr->v_res = LCD_V_RES;
 
   ESP_LOGI(TAG, "Turn off LCD backlight");
   gpio_config_t bk_gpio_config = {
@@ -72,7 +75,7 @@ static esp_err_t lcd_InitDisplayHw(void) {
       .miso_io_num = LCD_PIN_NUM_MISO,
       .quadwp_io_num = -1,
       .quadhd_io_num = -1,
-      .max_transfer_sz = LCD_H_RES * 80 * sizeof(uint16_t),
+      .max_transfer_sz = lcd_ptr->h_res * 80 * sizeof(uint16_t),
   };
   ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
 
@@ -111,17 +114,26 @@ static esp_err_t lcd_InitDisplayHw(void) {
   ESP_LOGI(TAG, "Turn on LCD backlight");
   gpio_set_level(LCD_PIN_NUM_BK_LIGHT, LCD_BK_LIGHT_ON_LEVEL);
 
+  // Allocate draw 2 buffers for LVGL
+  // it's recommended to choose the size of the draw buffer(s) to be at least 1/10 screen sized
+  lcd_ptr->buffer_size = (lcd_ptr->h_res * lcd_ptr->v_res) >> 3;
+
+  lcd_ptr->buffer1 = spi_bus_dma_memory_alloc(LCD_HOST, lcd_ptr->buffer_size, 0);
+  assert(lcd_ptr->buffer1);
+  lcd_ptr->buffer2 = spi_bus_dma_memory_alloc(LCD_HOST, lcd_ptr->buffer_size, 0);
+  assert(lcd_ptr->buffer2);
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
-esp_err_t lcd_InitDisplay(void) {
+esp_err_t lcd_InitDisplayHw(lcd_t* lcd_ptr) {
   esp_err_t result = ESP_OK;
 
   esp_log_level_set(TAG, CONFIG_LCD_ILI9341V_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  result = lcd_InitDisplayHw();
+  result = lcd_SetupDisplayHw(lcd_ptr);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
