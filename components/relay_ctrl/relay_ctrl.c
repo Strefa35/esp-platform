@@ -145,15 +145,24 @@ static esp_err_t relayctrl_ParseRelays(const cJSON* relays) {
  * @param json_str - json message
  * 
  * {
- *   "operation": "set/get"
+ *   "operation": "set",
  *   "relays": [
  *      { 
  *        "number": 0 or 1,
  *        "state": "on/off"
  *      },
  *   ]
- * 
  * }
+ *
+ * {
+ *   "operation": "get",
+ *   "relays": [
+ *      { 
+ *        "number": 0 or 1,
+ *      },
+ *   ]
+ * }
+
  * 
  * @return esp_err_t 
  */
