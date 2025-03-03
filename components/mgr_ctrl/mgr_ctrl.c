@@ -349,6 +349,27 @@ static esp_err_t mgr_parseMqttEvent(data_mqtt_event_e event_id) {
   return result;
 }
 
+static esp_err_t mgr_ParseRegisterEvent(const cJSON* root) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  const cJSON* uid = cJSON_GetObjectItem(root, "uid");
+  if (uid) {
+    const char* uid_str = cJSON_GetStringValue(uid);
+
+    /* Parse ONLY for different UID */
+    if (memcmp(uid_str, mgr_uid, MGR_UID_LEN) != 0) {
+      ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, uid_str);
+
+    } else {
+      ESP_LOGW(TAG, "[%s] This is REGISTER/ESP from me. I don't have to support it.", __func__);
+    }
+    result = ESP_OK;
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t mgr_ParseRegisterRequest(const data_mqtt_data_t* data_ptr) {
   esp_err_t result = ESP_FAIL;
 
@@ -362,6 +383,8 @@ static esp_err_t mgr_ParseRegisterRequest(const data_mqtt_data_t* data_ptr) {
       if (strcmp(o_str, "get") == 0) {
         mgr_CreateModuleList();
         result = ESP_OK;
+      } else if (strcmp(o_str, "event") == 0) {
+        result = mgr_ParseRegisterEvent(root);
       } else {
         ESP_LOGW(TAG, "[%s] Unknown operation: '%s'", __func__, o_str);
       }
