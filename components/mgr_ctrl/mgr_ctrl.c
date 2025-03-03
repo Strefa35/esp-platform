@@ -38,6 +38,9 @@
 
 #define MGR_TOPIC_MAX_LEN       (20U)
 #define MGR_UID_LEN             (10U)
+#define MGR_MAC_LEN             (17U)
+#define MGR_IP_LEN              (15U)
+
 #define MGR_TOPIC_LEN           (MGR_TOPIC_MAX_LEN - MGR_UID_LEN - 1)
 
 #define MGR_UID_IDX             (0U)
@@ -68,15 +71,19 @@ static data_eth_info_t    mgr_eth_info = {};
  *        - UID - has 10 bytes: 'ESP_12AB34'
  *        - topic - has MQTT_TOPIC_LEN bytes: '/sys'
  */
-static char     mgr_topic_buffer[MGR_TOPIC_MAX_LEN];
+//static char     mgr_topic_buffer[MGR_TOPIC_MAX_LEN];
 
-static char     mgr_uid_pattern[]   = "ESP_%02X%02X%02X";
-static char     mgr_topic_pattern[] = "%s/%s";
+static char mgr_reg_pattern[]   = "REGISTER/ESP";
+static char mgr_uid_pattern[]   = "ESP_%02X%02X%02X";
+static char mgr_mac_pattern[]   = "%02X:%02X:%02X:%02X:%02X:%02X";
+static char mgr_ip_pattern[]    = "%d.%d.%d.%d";
 
-static char     mgr_uid[MGR_UID_LEN + 1] = {}; /* keeps only UID, as: ESP_12AB34 */
+static char mgr_topic_pattern[] = "%s/%s";
 
-static char*    mgr_uid_ptr    = &mgr_topic_buffer[MGR_UID_IDX];
-static char*    mgr_topic_ptr  = &mgr_topic_buffer[MGR_TOPIC_IDX];
+static char mgr_uid[MGR_UID_LEN + 1]  = {}; /* keeps only UID, as: ESP_12AB34 */
+static char mgr_mac[MGR_MAC_LEN + 1]  = {}; /* keeps only MAC, as: 12:34:56:78:90:AB */
+static char mgr_ip[MGR_IP_LEN + 1]    = {}; /* keeps only IP, as: 123.123.123.123 */
+
 
 /**
  * @brief The variable holds a pointer to the send_fn() function to invoke it faster.
@@ -157,10 +164,10 @@ static void mgr_CreateUid(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
 
   sprintf(mgr_uid, mgr_uid_pattern, mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
-  sprintf(mgr_uid_ptr, mgr_uid_pattern, mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
-
   ESP_LOGD(TAG, "[%s]     mgr_uid: '%s'", __func__, mgr_uid);
-  ESP_LOGD(TAG, "[%s] mgr_uid_ptr: '%s'", __func__, mgr_uid_ptr);
+
+  sprintf(mgr_mac, mgr_mac_pattern, mgr_eth_mac[0], mgr_eth_mac[1], mgr_eth_mac[2], mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
+  ESP_LOGD(TAG, "[%s]     mgr_mac: '%s'", __func__, mgr_mac);
 
   ESP_LOGI(TAG, "--%s()", __func__);
 }
@@ -170,14 +177,18 @@ static void mgr_CreateUid(void) {
  *
  * data.topic: 'REGISTER/ESP'
  * data.msg: JSON format
- *   {
- *     "uid": "ESP_12AB34",
+ *  {
+ *    "operation": "event",
+ *    "uid": "ESP_12AB34",
+ *    "mac": "12:34:56:78:90:AB",
+ *    "ip": "xxx.xxx.xxx.xxx",
  *     "list": ["eth", "mqtt"]
  *   }
  *
  */
 void mgr_CreateModuleList(void) {
-  const char json_str[] = "{ \"uid\": \"\", \"list\": [] }";
+  const char json_str[] = "{\"operation\": \"event\",\"uid\": \"\",\"mac\": \"\",\"ip\": \"\",\"list\": []}";
+   
   msg_t msg = {
     .type = MSG_TYPE_MQTT_PUBLISH,
     .from = REG_MGR_CTRL,
@@ -193,15 +204,16 @@ void mgr_CreateModuleList(void) {
     {
       int ret = -1;
 
-      cJSON *uid = cJSON_GetObjectItem(root, "uid");
-      cJSON_SetValuestring(uid, mgr_uid);
+      cJSON_SetValuestring(cJSON_GetObjectItem(root, "uid"), mgr_uid);
+      cJSON_SetValuestring(cJSON_GetObjectItem(root, "mac"), mgr_mac);
+      cJSON_SetValuestring(cJSON_GetObjectItem(root, "ip"), mgr_ip);
 
       cJSON *list = cJSON_GetObjectItem(root, "list");
       for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
         cJSON_AddItemToArray(list, cJSON_CreateString(mgr_reg_list[idx].name));
       }
       if ((ret = cJSON_PrintPreallocated(root, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0)) == 1) {
-        sprintf(msg.payload.mqtt.u.data.topic, "REGISTER/ESP");
+        sprintf(msg.payload.mqtt.u.data.topic, mgr_reg_pattern);
         esp_err_t result = mgr_send_to_mqtt_fn(&msg);
         if (result != ESP_OK) {
           ESP_LOGE(TAG, "[%s] Send() - Error: %d", __func__, result);
@@ -222,10 +234,10 @@ void mgr_CreateModuleList(void) {
  * @brief Send message with topic to subscribe for every module
  *
  * topic: STRING format
- *   ESP_12AB34/cmd/topic_1 - 1st topic
- *   ESP_12AB34/cmd/topic_2 - 2nd topic
+ *   ESP_12AB34/topic_1 - 1st topic
+ *   ESP_12AB34/topic_2 - 2nd topic
  *   ...
- *   ESP_12AB34/cmd/topic_n - n topic
+ *   ESP_12AB34/topic_n - n topic
  *
  */
 void mgr_SubscribeTopic(void) {
@@ -237,6 +249,15 @@ void mgr_SubscribeTopic(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
   if (mgr_send_to_mqtt_fn) {
+
+    /* Subscribe REGISTER/ESP */
+    sprintf(msg.payload.mqtt.u.topic, mgr_reg_pattern);
+    esp_err_t result = mgr_send_to_mqtt_fn(&msg);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] Send() - Error: %d", __func__, result);
+    }
+
+    /* Subscribe every registered module */
     for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
       mgr_topic_list[idx].type = mgr_reg_list[idx].type;
       sprintf(mgr_topic_list[idx].topic, mgr_topic_pattern, mgr_uid, mgr_reg_list[idx].name);
@@ -328,40 +349,72 @@ static esp_err_t mgr_parseMqttEvent(data_mqtt_event_e event_id) {
   return result;
 }
 
+static esp_err_t mgr_ParseRegisterRequest(const data_mqtt_data_t* data_ptr) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(topic: '%s', msg: '%s')", __func__, data_ptr->topic, data_ptr->msg);
+  cJSON* root = cJSON_Parse(data_ptr->msg);
+  if (root) {
+    const cJSON* operation = cJSON_GetObjectItem(root, "operation");
+    if (operation) {
+      const char* o_str = cJSON_GetStringValue(operation);
+      ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
+      if (strcmp(o_str, "get") == 0) {
+        mgr_CreateModuleList();
+        result = ESP_OK;
+      } else {
+        ESP_LOGW(TAG, "[%s] Unknown operation: '%s'", __func__, o_str);
+      }
+    } else {
+      ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+      ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+    }
+    cJSON_Delete(root);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t mgr_ParseMqttData(const msg_t* msg) {
   const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
   esp_err_t result = ESP_ERR_NOT_FOUND;
 
   ESP_LOGI(TAG, "++%s(topic: '%s', msg: '%s')", __func__, data_ptr->topic, data_ptr->msg);
 
-  /* topic must be grater than UID len + at least 4 bytes: */
-  /* UID + '/' + module name:  e.g. ESP_12AB34/123 */
-  if (strlen(data_ptr->topic) < (MGR_UID_LEN + 4)) {
-    ESP_LOGE(TAG, "[%s] topic: '%s' too short, size: %d", __func__, data_ptr->topic, strlen(data_ptr->topic));
-    return ESP_ERR_INVALID_SIZE;
-  }
+  if (memcmp(data_ptr->topic, mgr_reg_pattern, strlen(mgr_reg_pattern)) == 0) {
+    /* This is specific topic = REGISTER/ESP */
+    /* When it arrived then resend REGISTER/ESP message once again */
+    result = mgr_ParseRegisterRequest(data_ptr);
 
-  /* Check UID in the topic */
-  if (memcmp(data_ptr->topic, mgr_uid, MGR_UID_LEN) != 0) {
-    ESP_LOGE(TAG, "[%s] topic: '%s' doesn't contain UID: '%s'", __func__, data_ptr->topic, mgr_uid);
-    return ESP_ERR_INVALID_ARG;
-  }
+  } else {
+    /* topic must be grater than UID len + at least 4 bytes: */
+    /* UID + '/' + module name:  e.g. ESP_12AB34/123 */
+    if (strlen(data_ptr->topic) < (MGR_UID_LEN + 4)) {
+      ESP_LOGE(TAG, "[%s] topic: '%s' too short, size: %d", __func__, data_ptr->topic, strlen(data_ptr->topic));
+      return ESP_ERR_INVALID_SIZE;
+    }
 
-  /* Gets module name and call send_fn() if module was found */
-  ESP_LOGD(TAG, "[%s] Find a module: '%s'", __func__, &(data_ptr->topic[MGR_UID_LEN + 1]));
-  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-    ESP_LOGD(TAG, "[%s] Registered module: '%s' on idx: %d", __func__, mgr_reg_list[idx].name, idx);
-    if (memcmp(&(data_ptr->topic[MGR_UID_LEN + 1]), mgr_reg_list[idx].name, strlen(mgr_reg_list[idx].name)) == 0) {
-      ESP_LOGD(TAG, "[%s] Module '%s' found.", __func__, mgr_reg_list[idx].name);
-      if (mgr_reg_list[idx].send_fn) {
-        result = mgr_reg_list[idx].send_fn(msg);
-      } else {
-        result = ESP_FAIL;
+    /* Check UID in the topic */
+    if (memcmp(data_ptr->topic, mgr_uid, MGR_UID_LEN) != 0) {
+      ESP_LOGE(TAG, "[%s] topic: '%s' doesn't contain UID: '%s'", __func__, data_ptr->topic, mgr_uid);
+      return ESP_ERR_INVALID_ARG;
+    }
+
+    /* Gets module name and call send_fn() if module was found */
+    ESP_LOGD(TAG, "[%s] Find a module: '%s'", __func__, &(data_ptr->topic[MGR_UID_LEN + 1]));
+    for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+      ESP_LOGD(TAG, "[%s] Registered module: '%s' on idx: %d", __func__, mgr_reg_list[idx].name, idx);
+      if (memcmp(&(data_ptr->topic[MGR_UID_LEN + 1]), mgr_reg_list[idx].name, strlen(mgr_reg_list[idx].name)) == 0) {
+        ESP_LOGD(TAG, "[%s] Module '%s' found.", __func__, mgr_reg_list[idx].name);
+        if (mgr_reg_list[idx].send_fn) {
+          result = mgr_reg_list[idx].send_fn(msg);
+        } else {
+          result = ESP_FAIL;
+        }
+        break;
       }
-      break;
     }
   }
-
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -411,6 +464,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       mgr_eth_info = msg->payload.eth.u.info;
 
       addr = (uint8_t*) &(mgr_eth_info.ip);
+      sprintf(mgr_ip, mgr_ip_pattern, addr[0], addr[1], addr[2], addr[3]);
       ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
         addr[0], addr[1], addr[2], addr[3]
       );
