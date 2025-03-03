@@ -37,7 +37,6 @@
 
 static const char* TAG = "ESP::LCD";
 
-
 static QueueHandle_t      lcd_msg_queue = NULL;
 static TaskHandle_t       lcd_task_id = NULL;
 static SemaphoreHandle_t  lcd_sem_id = NULL;
