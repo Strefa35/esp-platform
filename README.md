@@ -1,6 +1,6 @@
-# Electric Water Heater Controller
+# Idea
 
-The idea of ​​the project was created to control the switching on of an electric water heater based on the intensity of sunlight. This was to enable the use of the surplus energy produced by the solar panels to heat utility water in a single-family house. 
+The idea of the project was created to control the switching on of an electric water heater based on the intensity of sunlight. This was to enable the use of the surplus energy produced by the solar panels to heat utility water in a single-family house. 
 
 In order to fully automate this process, it was necessary to build a controller that would turn the power supply of the electric water heater on or off when the solar panels produce the most energy. Its excess is discharged into the power company's network.
 
@@ -10,10 +10,21 @@ In order to fully automate this process, it was necessary to build a controller 
 - easy expansion
 - possibility of connecting various sensors (temperature, humidity, light intensity, etc.)
 
+# ESP Platform
+That's why I created my own software platform to easily configure modules depending on the ESP32 board version.
+
+The solution consists of several modules:
+- mgr_ctrl
+- eth_ctrl
+- mqtt_ctrl
+- relay_ctrl
+
+The main module is the management module (mgr_ctrl) which allows for managing modules and mediates data transmission between modules.
+
 # Quick Reference
 
 ## Clone repo
-  `git clone --recursive git@github.com:Strefa35/esp-heater-controller.git`
+  `git clone --recursive git@github.com:Strefa35/esp-platform.git`
 
 ## Build
 

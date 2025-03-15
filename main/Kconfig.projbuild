@@ -1,7 +1,8 @@
-menu "Heater Controller - Manager"
+menu "ESP32 - Platform"
 
-    orsource "Kconfig.inc"
+    orsource "Kconfig.main"
+    orsource "Kconfig.mgr"
 
-    orsource "../components/Kconfig.inc"
+    orsource "../modules/Kconfig.inc"
 
 endmenu
