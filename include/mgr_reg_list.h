@@ -117,7 +117,7 @@ static mgr_reg_t mgr_reg_list[] = {
 
 #ifdef CONFIG_TEMPLATE_CTRL_ENABLE
   {
-    "template", MSG_XXX_CTRL,
+    "template", REG_XXX_CTRL,
     TemplateCtrl_Init, TemplateCtrl_Done, TemplateCtrl_Run, TemplateCtrl_Send
   },
 #endif
