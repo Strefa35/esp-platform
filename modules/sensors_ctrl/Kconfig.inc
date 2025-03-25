@@ -7,7 +7,6 @@ menu "Sensors Controller"
             Enable Sensors Controller to use by the Manager
 
         choice SENSORS_CTRL_LOG_LEVEL
-            depends on SENSORS_CTRL_ENABLE
             bool "Log level"
             default SENSORS_CTRL_LOG_DEFAULT_LEVEL_INFO
             help
@@ -40,14 +39,12 @@ menu "Sensors Controller"
             default 5 if SENSORS_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
 
     config SENSOR_TSL2561_ENABLE
-        depends on SENSORS_CTRL_ENABLE
         bool "Enable Light Sensor TSL2561"
         default "n"
         help
             Enable Light Sensor TSL2561 to use in Sensors Controller
 
         choice SENSOR_TSL2561_LOG_LEVEL
-            depends on SENSOR_TSL2561_ENABLE
             bool "Log level"
             default SENSOR_TSL2561_LOG_DEFAULT_LEVEL_INFO
             help
