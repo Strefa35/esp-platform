@@ -49,6 +49,10 @@
   #include "template_ctrl.h"
 #endif
 
+#ifdef CONFIG_SENSORS_CTRL_ENABLE
+  #include "sensors_ctrl.h"
+#endif
+
 #ifdef CONFIG_MQTT_CTRL_ENABLE
   #include "mqtt_ctrl.h"
 #endif
@@ -112,6 +116,13 @@ static mgr_reg_t mgr_reg_list[] = {
   {
     "cli", REG_CLI_CTRL,
     CliCtrl_Init, CliCtrl_Done, CliCtrl_Run, CliCtrl_Send
+  },
+#endif
+
+#ifdef CONFIG_SENSORS_CTRL_ENABLE
+  {
+    "sensors", REG_SENSORS_CTRL,
+    SensorsCtrl_Init, SensorsCtrl_Done, SensorsCtrl_Run, SensorsCtrl_Send
   },
 #endif
 

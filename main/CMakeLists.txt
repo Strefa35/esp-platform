@@ -63,6 +63,11 @@ if(CONFIG_LCD_CTRL_ENABLE)
   list(APPEND PRIV_REQUIRE_LIST lcd_ctrl)
 endif()
 
+if(CONFIG_SENSORS_CTRL_ENABLE)
+  list(APPEND INCLUDE_LIST  ../modules/sensors_ctrl/include)
+  list(APPEND PRIV_REQUIRE_LIST sensors_ctrl)
+endif()
+
 #==================================================================
 # Example, how to add a new module to the ESP platform
 if(CONFIG_TEMPLATE_CTRL_ENABLE)
