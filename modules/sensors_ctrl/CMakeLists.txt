@@ -1,5 +1,11 @@
 message(STATUS "=========| MODULES | SENSORS_CTRL |==================================")
 
+option(SENSOR_TSL2561   "Enable Sensor TSL2561"   ON)
+
+message(STATUS, "--------------------------------------------------------------------")
+message(STATUS, "          SENSOR TSL2561: ${SENSOR_TSL2561}")
+message(STATUS, "--------------------------------------------------------------------")
+
 #####################################
 #### SOURCE_LIST
 #####################################
@@ -26,11 +32,9 @@ set(REQUIRE_LIST
 set(PRIV_REQUIRE_LIST 
 )
 
-if(CONFIG_SENSOR_TSL2561_ENABLE)
-  list(APPEND SOURCE_LIST sensor_tsl2561.c)
-  list(APPEND INCLUDE_LIST include)
-  list(APPEND PRIV_REQUIRE_LIST tsl2561)
-endif()
+list(APPEND SOURCE_LIST sensor_tsl2561.c)
+list(APPEND INCLUDE_LIST include)
+list(APPEND PRIV_REQUIRE_LIST tsl2561)
 
 #####################################
 #### idf_component_register
