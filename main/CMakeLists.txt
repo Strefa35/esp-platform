@@ -63,9 +63,9 @@ if(CONFIG_LCD_CTRL_ENABLE)
   list(APPEND PRIV_REQUIRE_LIST lcd_ctrl)
 endif()
 
-if(CONFIG_SENSORS_CTRL_ENABLE)
-  list(APPEND INCLUDE_LIST  ../modules/sensors_ctrl/include)
-  list(APPEND PRIV_REQUIRE_LIST sensors_ctrl)
+if(CONFIG_SENSOR_CTRL_ENABLE)
+  list(APPEND INCLUDE_LIST  ../modules/sensor_ctrl/include)
+  list(APPEND PRIV_REQUIRE_LIST sensor_ctrl)
 endif()
 
 #==================================================================

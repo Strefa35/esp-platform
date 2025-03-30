@@ -110,7 +110,7 @@ typedef enum {
 //#define REG_XXX_CTRL      (1 << 19)
 //#define REG_XXX_CTRL      (1 << 20)
 //#define REG_XXX_CTRL      (1 << 21)
-#define REG_SENSORS_CTRL  (1 << 22)
+#define REG_SENSOR_CTRL   (1 << 22)
 #define REG_XXX_CTRL      (1 << 23) /* Only for using TemplateCtrl module as example */
 
 /* [4th byte]==========[8 bits]============= */

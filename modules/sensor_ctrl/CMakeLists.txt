@@ -1,4 +1,4 @@
-message(STATUS "=========| MODULES | SENSORS_CTRL |==================================")
+message(STATUS "=========| MODULES | SENSOR_CTRL |==================================")
 
 option(SENSOR_TSL2561   "Enable Sensor TSL2561"   ON)
 
@@ -10,7 +10,7 @@ message(STATUS, "---------------------------------------------------------------
 #### SOURCE_LIST
 #####################################
 set(SOURCE_LIST
-  sensors_ctrl.c
+  sensor_ctrl.c
 )
 
 #####################################

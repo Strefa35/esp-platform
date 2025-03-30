@@ -15,13 +15,14 @@
 #include "sdkconfig.h"
 
 #include "esp_log.h"
-#include "err.h"
-#include "msg.h"
 
-#include "sensors_ctrl.h"
+#include "sensor_ctrl.h"
 #include "sensor_tsl2561.h"
 
 #include "tsl2561.h"
+
+#include "err.h"
+#include "msg.h"
 
 
 #define TASK_NAME               "tsl2561-task"
@@ -41,6 +42,14 @@ typedef struct {
 
 static const char* TAG = "ESP::SENSORS::TSL2561";
 
+static sensor_cb_f  tsl2561_cb = NULL;
+
+
+/**
+ * @brief TSL2561 task
+ * 
+ * @param param 
+ */
 static void taskFn(void* param) {
   tsl2561_t handle = NULL;
   bool loop = true;
@@ -48,6 +57,10 @@ static void taskFn(void* param) {
   bool     power = false;
   uint8_t  id = 0;
   uint32_t lux = 0;
+
+  sensor_data_t data = {
+    .type = SENSOR_TYPE_TSL2561
+  };
 
   esp_err_t result = ESP_OK;
 
@@ -107,6 +120,16 @@ static void taskFn(void* param) {
       if (on != threshold.last_on) {
         ESP_LOGV(TAG, "[%s] LEVEL -> %d -> %d", __func__, threshold.last_on, on);
         threshold.last_on = on;
+        if (tsl2561_cb) {
+
+          data.dtype = SENSOR_DATA_LUX;
+          data.u.uint32[0] = lux;
+
+          result = tsl2561_cb(&data);
+          if (result != ESP_OK) {
+            ESP_LOGE(TAG, "[%s] tsl2561_cb(.dtype: %d) failed.", __func__, data.dtype);
+          }
+        }
       }
     }
   }
@@ -116,29 +139,67 @@ static void taskFn(void* param) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
-
-static bool init() {
+static esp_err_t init(const sensor_cb_f cb) {
   TaskHandle_t task_id = NULL;
-  bool result = true;
+  esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGI(TAG, "++%s(cb: %p)", __func__, cb);
   xTaskCreate(taskFn, TASK_NAME, TASK_STACK_SIZE, NULL, TASK_PRIORITY, &task_id);
   if (task_id == NULL)
   {
     ESP_LOGE(TAG, "[%s] xTaskCreate() failed.", __func__);
-    result = false;
+    result = ESP_FAIL;
   }
+  tsl2561_cb = cb;
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
-esp_err_t tsl2561_InitSensor(void) {
+esp_err_t sensor_InitTsl2561(const sensor_cb_f cb) {
   esp_err_t result = ESP_OK;
 
   esp_log_level_set(TAG, CONFIG_SENSOR_TSL2561_LOG_LEVEL);
 
-  ESP_LOGI(TAG, "++%s()", __func__);
-  init();
+  ESP_LOGI(TAG, "++%s(cb: %p)", __func__, cb);
+  result = init(cb);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
+
+esp_err_t sensor_DoneTsl2561(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+esp_err_t sensor_RunTsl2561(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+esp_err_t sensor_SetTsl2561(const sensor_data_t* data) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(data: %p)", __func__, data);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+esp_err_t sensor_GetTsl2561(sensor_data_t* data) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(data: %p)", __func__, data);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+

@@ -18,6 +18,7 @@ The solution consists of several modules:
 - eth_ctrl
 - mqtt_ctrl
 - relay_ctrl
+- sensor_ctrl
 
 The main module is the management module (mgr_ctrl) which allows for managing modules and mediates data transmission between modules.
 

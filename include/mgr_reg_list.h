@@ -1,5 +1,5 @@
 /**
- * @file mgr-reg-list.h
+ * @file mgr_reg_list.h
  * @author A.Czerwinski@pistacje.net
  * @brief 
  * @version 0.1
@@ -49,8 +49,8 @@
   #include "template_ctrl.h"
 #endif
 
-#ifdef CONFIG_SENSORS_CTRL_ENABLE
-  #include "sensors_ctrl.h"
+#ifdef CONFIG_SENSOR_CTRL_ENABLE
+  #include "sensor_ctrl.h"
 #endif
 
 #ifdef CONFIG_MQTT_CTRL_ENABLE
@@ -119,10 +119,10 @@ static mgr_reg_t mgr_reg_list[] = {
   },
 #endif
 
-#ifdef CONFIG_SENSORS_CTRL_ENABLE
+#ifdef CONFIG_SENSOR_CTRL_ENABLE
   {
-    "sensors", REG_SENSORS_CTRL,
-    SensorsCtrl_Init, SensorsCtrl_Done, SensorsCtrl_Run, SensorsCtrl_Send
+    "sensors", REG_SENSOR_CTRL,
+    SensorCtrl_Init, SensorCtrl_Done, SensorCtrl_Run, SensorCtrl_Send
   },
 #endif
 

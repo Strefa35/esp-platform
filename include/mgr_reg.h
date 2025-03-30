@@ -1,5 +1,5 @@
 /**
- * @file mgr-reg.h
+ * @file mgr_reg.h
  * @author A.Czerwinski@pistacje.net
  * @brief 
  * @version 0.1

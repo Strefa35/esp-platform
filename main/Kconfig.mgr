@@ -1,4 +1,4 @@
-menu "MGR Control"
+menu "Manager"
 
     choice MGR_CTRL_LOG_LEVEL
         bool "Log level"
