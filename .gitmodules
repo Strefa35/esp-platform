@@ -1,3 +1,0 @@
-[submodule "deps/esp-drivers"]
-	path = deps/esp-drivers
-	url = git@github.com:Strefa35/esp-drivers.git
