@@ -22,6 +22,7 @@
 #include "driver/gpio.h"
 
 #include "msg.h"
+#include "mgr_ctrl.h"
 #include "relay_ctrl.h"
 
 #include "err.h"
@@ -37,10 +38,12 @@
 #define RELAY_NUMBER_MIN          0
 #define RELAY_NUMBER_MAX          1
 
-#define RELAY_0                   (GPIO_NUM_32)
-#define RELAY_1                   (GPIO_NUM_33)
+#define RELAY_LIST_CNT            (sizeof(relay_slots)/sizeof(relay_t))
 
-#define GPIO_OUTPUT_PIN_SEL       ((1ULL << RELAY_0) | (1ULL << RELAY_1))
+typedef struct {
+  gpio_num_t  gpio;
+  uint32_t    level;
+} relay_t;
 
 static const char* TAG = "ESP::RELAY";
 
@@ -48,6 +51,17 @@ static const char* TAG = "ESP::RELAY";
 static QueueHandle_t      relay_msg_queue = NULL;
 static TaskHandle_t       relay_task_id = NULL;
 static SemaphoreHandle_t  relay_sem_id = NULL;
+
+static relay_t relay_slots[] = {
+  {
+    .gpio = GPIO_NUM_32,
+    .level = 0,
+  },
+  {
+    .gpio = GPIO_NUM_33,
+    .level = 0,
+  }
+};
 
 static esp_err_t relayctrl_Configure(void) {
   esp_err_t result = ESP_FAIL;
@@ -58,26 +72,47 @@ static esp_err_t relayctrl_Configure(void) {
 
   gpio.intr_type = GPIO_INTR_DISABLE;
   gpio.mode = GPIO_MODE_OUTPUT;
-  gpio.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
   gpio.pull_down_en = 0;
   gpio.pull_up_en = 0;
-  
+  gpio.pin_bit_mask = 0;
+  for (uint8_t idx = 0; idx < RELAY_LIST_CNT; ++idx) {
+    gpio.pin_bit_mask |= (1ULL << relay_slots[idx].gpio);
+  }
   result = gpio_config(&gpio);
-  if (result == ESP_OK) {
-    gpio_set_level(RELAY_0, 0);
-    gpio_set_level(RELAY_1, 0);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] gpio_config() - Error: %d", __func__, result);
+    return result;
+  }
+  for (uint8_t idx = 0; idx < RELAY_LIST_CNT; ++idx) {
+    result = gpio_set_level(relay_slots[idx].gpio, relay_slots[idx].level);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] gpio_set_level() - Error: %d", __func__, result);
+      return result;
+    }
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
 static esp_err_t relayctrl_SetRelayState(const int number, const uint32_t level) {
-  gpio_num_t gpio_num = (number == 0 ? RELAY_0 : RELAY_1);
   esp_err_t result = ESP_FAIL;
 
   ESP_LOGI(TAG, "++%s(number: %d, level: %ld)", __func__, number, level);
-  result = gpio_set_level(gpio_num, level);
+  result = gpio_set_level(relay_slots[number].gpio, level);
+  if (result == ESP_OK) {
+    relay_slots[number].level = level;
+  }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t relayctrl_GetRelayState(const int number, uint32_t* level) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(number: %d)", __func__, number);
+  relay_slots[number].level = gpio_get_level(relay_slots[number].gpio);
+  *level = relay_slots[number].level;
+  ESP_LOGI(TAG, "--%s(level: %ld) - result: %d", __func__, *level, result);
   return result;
 }
 
@@ -100,7 +135,7 @@ static esp_err_t relayctrl_SetRelay(const cJSON* relay) {
   const int number = cJSON_GetNumberValue(o_number);
   const char* state = cJSON_GetStringValue(o_state);
 
-  if ((number < RELAY_NUMBER_MIN) || (number > RELAY_NUMBER_MAX)) {
+  if ((number < 0) || (number >= RELAY_LIST_CNT)) {
     ESP_LOGE(TAG, "[%s] Relay number is out of range: %d", __func__, number);
     return ESP_FAIL;
   }
@@ -118,7 +153,7 @@ static esp_err_t relayctrl_SetRelay(const cJSON* relay) {
   return result;
 }
 
-static esp_err_t relayctrl_ParseRelays(const cJSON* relays) {
+static esp_err_t relayctrl_ParseSetRelays(const cJSON* relays) {
   esp_err_t result = ESP_FAIL;
 
   ESP_LOGI(TAG, "++%s()", __func__);
@@ -140,10 +175,89 @@ static esp_err_t relayctrl_ParseRelays(const cJSON* relays) {
 }
 
 /**
+ * @brief Prepare response from relay
+ * 
+ * {
+ *   "operation": "response/event",
+ *   "relays": [
+ *      { 
+ *        "number": 0 or 1,
+ *        "state": "on/off"
+ *      },
+ *   ]
+ * }
+ *
+ * @param is_event - true/false
+ * @return esp_err_t
+ */
+static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
+  msg_t msg = {
+    .type = MSG_TYPE_MQTT_PUBLISH,
+    .from = REG_RELAY_CTRL,
+    .to = REG_MQTT_CTRL,
+  };
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(is_event: %d)", __func__, is_event);
+
+  /* create root of json with response/event */
+  cJSON *root = cJSON_CreateObject();
+  if (root != NULL)
+  {
+    int ret = -1;
+
+    /* add "operation": "response/event" */
+    cJSON_AddStringToObject(root, "operation", (is_event == true ? "event" : "response"));
+
+    /* add "relays" array */
+    cJSON* relays = cJSON_AddArrayToObject(root, "relays");
+    if (relays) {
+      /* add */
+      for (int idx = 0; idx < RELAY_LIST_CNT; ++idx) {
+        uint32_t level = 0;
+
+        result = relayctrl_GetRelayState(idx, &level);
+        if (result == ESP_OK) {
+          /* create relay object */
+          cJSON *relay = cJSON_CreateObject();
+
+          /* add "number": value */
+          cJSON_AddNumberToObject(relay, "number", idx);
+
+          /* add "state": "on/off" */
+          cJSON_AddStringToObject(relay, "state", level == 0 ? "off" : "on");
+
+          /* Add relay object to the relays array */
+          cJSON_AddItemToArray(relays, relay);
+        }
+      }
+    }
+    if (result == ESP_OK) {
+      /* Send json to the thread */
+      if ((ret = cJSON_PrintPreallocated(root, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
+        /* add topic -> ESP/12AB34/relay */
+        //sprintf(msg.payload.mqtt.u.data.topic, mgr_reg_pattern);
+
+        result = MGR_Send(&msg);
+        if (result != ESP_OK) {
+          ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
+        }
+      } else {
+        ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
+      }
+
+    }
+    cJSON_Delete(root);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
  * @brief Parse json format payload
- * 
+ *
  * @param json_str - json message
- * 
+ *
  * {
  *   "operation": "set",
  *   "relays": [
@@ -155,12 +269,7 @@ static esp_err_t relayctrl_ParseRelays(const cJSON* relays) {
  * }
  *
  * {
- *   "operation": "get",
- *   "relays": [
- *      { 
- *        "number": 0 or 1,
- *      },
- *   ]
+ *   "operation": "get"
  * }
 
  * 
@@ -179,10 +288,9 @@ static esp_err_t relayctrl_ParseMqttData(const char* json_str) {
       if (strcmp(o_str, "set") == 0) {
         const cJSON* relays = cJSON_GetObjectItem(root, "relays");
 
-        result = relayctrl_ParseRelays(relays);
-
+        result = relayctrl_ParseSetRelays(relays);
       } else if (strcmp(o_str, "get") == 0) {
-
+        result = relayctrl_PrepareResponse(false);
       } else {
         ESP_LOGW(TAG, "[%s] Unknown operation: '%s'", __func__, o_str);
       }

@@ -6,6 +6,8 @@ sdkconfig.old
 
 #Visual Studio Code folder
 .vscode
+*.code-workspace
 
 # Others
 managed_components
+dependencies.lock

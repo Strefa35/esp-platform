@@ -25,7 +25,13 @@ The main module is the management module (mgr_ctrl) which allows for managing mo
 # Quick Reference
 
 ## Clone repo
-  `git clone --recursive git@github.com:Strefa35/esp-platform.git`
+  `git clone --recursive git@github.com:Strefa35/esp-platform.git esp/esp-platform`
+
+## ESP-IDF Extra Components
+  `git clone --recursive git@github.com:espressif/idf-extra-components.git esp/idf-extra-components`
+
+## ESP drivers
+  `git clone git@github.com:Strefa35/esp-drivers.git esp/esp-drivers`
 
 ## Build
 
@@ -69,7 +75,7 @@ Topic: `REGISTER/ESP`, Operation: `get/event`
   ```
   {
     "operation": "event",
-    "uid": "ESP_12AB34",
+    "uid": "ESP/12AB34",
     "mac": "12:34:56:78:90:AB",
     "ip": "10.0.0.20",
     "list": ["eth", "mqtt"]
@@ -83,9 +89,9 @@ Topic: `REGISTER/ESP`, Operation: `get/event`
   }
   ```
 
-### ESP_12AB34/relay
+### ESP/12AB34/relay
 
-Topic: `ESP_12AB34/relay`, Operation: `set/get/event/response`
+Topic: `ESP/12AB34/relay`, Operation: `set/get/event/response`
 
 - Set state for specific relay number:
   ```
@@ -103,14 +109,9 @@ Topic: `ESP_12AB34/relay`, Operation: `set/get/event/response`
   ```
   {
     "operation": "get",
-    "relays": [
-      { 
-        "number": 0 or 1,
-      },
-    ]
   }
   ```
-- Change of state for the given relay number:
+- Response after get:
   ```
   {
     "operation": "response",
@@ -122,7 +123,7 @@ Topic: `ESP_12AB34/relay`, Operation: `set/get/event/response`
     ]
   }
   ```
-- Change of state for the given relay number:
+- Event notification for specific relays:
   ```
   {
     "operation": "event",
@@ -132,5 +133,59 @@ Topic: `ESP_12AB34/relay`, Operation: `set/get/event/response`
         "state": "on/off"
       },
     ]
+  }
+  ```
+
+### ESP/12AB34/sensor
+
+Topic: `ESP/12AB34/sensor`, Operation: `set/get/event/response`
+
+- Set state for specific relay number:
+  ```
+  {
+    "operation": "set",
+    "sensor": "name-of-sensor",
+    "threshold": {
+      "min": value,
+      "max": value
+    }
+  }
+  ```
+- Get list of parameters for specific sensor:
+  ```
+  {
+    "operation": "get",
+    "sensor": "name-of-sensor",
+    "list": ["info", threshold", "lux", ...]
+  }
+  ```
+- Response after get:
+  ```
+  {
+    "operation": "response",
+    "sensor": "name-of-sensor",
+    "info": {
+      
+    },
+    "threshold": {
+      "min": value,
+      "max": value
+    },
+    "lux": value,
+  }
+  ```
+- Event notification for specific sensor:
+  ```
+  {
+    "operation": "event",
+    "sensor": "name-of-sensor",
+    "info": {
+      
+    },
+    "threshold": {
+      "min": value,
+      "max": value
+    },
+    "lux": value,
   }
   ```

@@ -20,6 +20,7 @@ typedef enum {
 } sensor_type_e;
 
 typedef enum {
+  SENSOR_DATA_INFO,
   SENSOR_DATA_THERSHOLD,
   SENSOR_DATA_LUX,
 

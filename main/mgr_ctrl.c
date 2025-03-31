@@ -68,19 +68,19 @@ static data_eth_info_t    mgr_eth_info = {};
  *
  *   UID/topic
  *      where:
- *        - UID - has 10 bytes: 'ESP_12AB34'
+ *        - UID - has 10 bytes: 'ESP/12AB34'
  *        - topic - has MQTT_TOPIC_LEN bytes: '/sys'
  */
 //static char     mgr_topic_buffer[MGR_TOPIC_MAX_LEN];
 
 static char mgr_reg_pattern[]   = "REGISTER/ESP";
-static char mgr_uid_pattern[]   = "ESP_%02X%02X%02X";
+static char mgr_uid_pattern[]   = "ESP/%02X%02X%02X";
 static char mgr_mac_pattern[]   = "%02X:%02X:%02X:%02X:%02X:%02X";
 static char mgr_ip_pattern[]    = "%d.%d.%d.%d";
 
 static char mgr_topic_pattern[] = "%s/%s";
 
-static char mgr_uid[MGR_UID_LEN + 1]  = {}; /* keeps only UID, as: ESP_12AB34 */
+static char mgr_uid[MGR_UID_LEN + 1]  = {}; /* keeps only UID, as: ESP/12AB34 */
 static char mgr_mac[MGR_MAC_LEN + 1]  = {}; /* keeps only MAC, as: 12:34:56:78:90:AB */
 static char mgr_ip[MGR_IP_LEN + 1]    = {}; /* keeps only IP, as: 123.123.123.123 */
 
@@ -157,7 +157,7 @@ static esp_err_t mgr_Send(const msg_t* msg) {
  * @brief Create a UID
  *
  * Creates UID from MAC address.
- * It will be as: ESP_12AB34
+ * It will be as: ESP/12AB34
  *
  */
 static void mgr_CreateUid(void) {
@@ -179,7 +179,7 @@ static void mgr_CreateUid(void) {
  * data.msg: JSON format
  *  {
  *    "operation": "event",
- *    "uid": "ESP_12AB34",
+ *    "uid": "ESP/12AB34",
  *    "mac": "12:34:56:78:90:AB",
  *    "ip": "xxx.xxx.xxx.xxx",
  *     "list": ["eth", "mqtt"]
@@ -685,6 +685,12 @@ esp_err_t MGR_Run(void) {
   return result;
 }
 
+/**
+ * @brief Send message to the manager's task
+ *
+ * @param msg - message
+ * @return esp_err_t
+ */
 esp_err_t MGR_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 

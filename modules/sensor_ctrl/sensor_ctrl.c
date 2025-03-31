@@ -43,6 +43,34 @@ static TaskHandle_t       sensor_task_id = NULL;
 static SemaphoreHandle_t  sensor_sem_id = NULL;
 
 
+static esp_err_t parseDataTsl2561(const sensor_data_t* data) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(data: %p)", __func__, data);
+  ESP_LOGD(TAG, "[%s] data type: %d [%s]", __func__,
+        data->dtype, GET_SENSOR_DATA_NAME(data->dtype));
+  switch (data->dtype) {
+    case SENSOR_DATA_INFO: {
+      break;
+    }
+    case SENSOR_DATA_THERSHOLD: {
+      break;
+    }
+    case SENSOR_DATA_LUX: {
+      ESP_LOGD(TAG, "[%s] LUX: %ldlx", __func__, data->u.int32[0]);
+      break;
+    }
+    default: {
+      ESP_LOGW(TAG, "[%s] Unknown data type: %d from sensor: %d [%s]", __func__,
+        data->dtype, data->type, GET_SENSOR_TYPE_NAME(data->type));
+      result = ESP_FAIL;
+      break;
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t parseData(const sensor_data_t* data) {
   esp_err_t result = ESP_OK;
   
@@ -50,12 +78,9 @@ static esp_err_t parseData(const sensor_data_t* data) {
   ESP_LOGD(TAG, "[%s] DATA: type: %d [%s], dtype: %d [%s]", __func__, 
         data->type, GET_SENSOR_TYPE_NAME(data->type), 
         data->dtype, GET_SENSOR_DATA_NAME(data->dtype));
-
   switch (data->type) {
     case SENSOR_TYPE_TSL2561: {
-      if (data->dtype == SENSOR_DATA_LUX) {
-        ESP_LOGD(TAG, "[%s] LUX: %ldlx", __func__, data->u.int32[0]);
-      }
+      result = parseDataTsl2561(data);
       break;
     }
     default: {
@@ -64,11 +89,9 @@ static esp_err_t parseData(const sensor_data_t* data) {
       break;
     }
   }
-
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
-
 
 static esp_err_t sensorCb(const sensor_data_t* data) {
   esp_err_t result = ESP_FAIL;
@@ -83,7 +106,6 @@ static esp_err_t sensorCb(const sensor_data_t* data) {
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
-
 
 static esp_err_t initSensors(void) {
   esp_err_t result = ESP_OK;
