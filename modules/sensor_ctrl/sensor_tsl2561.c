@@ -26,7 +26,7 @@
 
 
 #define TASK_NAME               "tsl2561-task"
-#define TASK_STACK_SIZE         2024
+#define TASK_STACK_SIZE         4096
 #define TASK_PRIORITY           20
 
 #define POLLING_TIME_IN_MS      (1000)

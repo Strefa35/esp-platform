@@ -52,6 +52,8 @@ static QueueHandle_t      relay_msg_queue = NULL;
 static TaskHandle_t       relay_task_id = NULL;
 static SemaphoreHandle_t  relay_sem_id = NULL;
 
+static data_uid_t         relay_uid = {0};
+
 static relay_t relay_slots[] = {
   {
     .gpio = GPIO_NUM_32,
@@ -71,7 +73,7 @@ static esp_err_t relayctrl_Configure(void) {
   gpio_config_t gpio;
 
   gpio.intr_type = GPIO_INTR_DISABLE;
-  gpio.mode = GPIO_MODE_OUTPUT;
+  gpio.mode = GPIO_MODE_INPUT_OUTPUT;
   gpio.pull_down_en = 0;
   gpio.pull_up_en = 0;
   gpio.pin_bit_mask = 0;
@@ -107,7 +109,7 @@ static esp_err_t relayctrl_SetRelayState(const int number, const uint32_t level)
 }
 
 static esp_err_t relayctrl_GetRelayState(const int number, uint32_t* level) {
-  esp_err_t result = ESP_FAIL;
+  esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(number: %d)", __func__, number);
   relay_slots[number].level = gpio_get_level(relay_slots[number].gpio);
@@ -236,7 +238,7 @@ static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
       /* Send json to the thread */
       if ((ret = cJSON_PrintPreallocated(root, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
         /* add topic -> ESP/12AB34/relay */
-        //sprintf(msg.payload.mqtt.u.data.topic, mgr_reg_pattern);
+        sprintf(msg.payload.mqtt.u.data.topic, "%s/relay", relay_uid);
 
         result = MGR_Send(&msg);
         if (result != ESP_OK) {
@@ -289,8 +291,11 @@ static esp_err_t relayctrl_ParseMqttData(const char* json_str) {
         const cJSON* relays = cJSON_GetObjectItem(root, "relays");
 
         result = relayctrl_ParseSetRelays(relays);
+        if (result == ESP_OK) {
+          result = relayctrl_PrepareResponse(true); // event
+        }
       } else if (strcmp(o_str, "get") == 0) {
-        result = relayctrl_PrepareResponse(false);
+        result = relayctrl_PrepareResponse(false); // response
       } else {
         ESP_LOGW(TAG, "[%s] Unknown operation: '%s'", __func__, o_str);
       }
@@ -322,6 +327,12 @@ static esp_err_t relayctrl_ParseMsg(const msg_t* msg) {
     }
     case MSG_TYPE_RUN: {
       result = ESP_TASK_RUN;
+      break;
+    }
+
+    case MSG_TYPE_MGR_UID: {
+      memcpy(relay_uid, msg->payload.mgr.uid, strlen(msg->payload.mgr.uid) + 1);
+      ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, relay_uid);
       break;
     }
 
@@ -398,6 +409,8 @@ static esp_err_t relayctrl_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+
+  ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, relay_uid);
 
   /* Initialization message queue */
   relay_msg_queue = xQueueCreate(RELAY_MSG_MAX, sizeof(msg_t));

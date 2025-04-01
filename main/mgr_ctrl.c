@@ -73,7 +73,7 @@ static data_eth_info_t    mgr_eth_info = {};
  */
 //static char     mgr_topic_buffer[MGR_TOPIC_MAX_LEN];
 
-static char mgr_reg_pattern[]   = "REGISTER/ESP";
+static char mgr_reg_pattern[]   = "REGISTER/ESP/%02X%02X%02X";
 static char mgr_uid_pattern[]   = "ESP/%02X%02X%02X";
 static char mgr_mac_pattern[]   = "%02X:%02X:%02X:%02X:%02X:%02X";
 static char mgr_ip_pattern[]    = "%d.%d.%d.%d";
@@ -173,6 +173,29 @@ static void mgr_CreateUid(void) {
 }
 
 /**
+ * @brief Send UID to all modules
+ * 
+ */
+static void mgr_SendUidToAll(void) {
+  msg_t msg = {
+    .type = MSG_TYPE_MGR_UID,
+    .from = REG_MGR_CTRL,
+    .to = REG_ALL_CTRL,
+  };
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  memcpy(msg.payload.mgr.uid, mgr_uid, MGR_UID_LEN + 1);
+  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+    if (msg.to & mgr_reg_list[idx].type) {
+      if (mgr_reg_list[idx].send_fn) {
+        esp_err_t result = mgr_reg_list[idx].send_fn(&msg);
+      }
+    }
+  }
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
+/**
  * @brief Create a list of registered modules
  *
  * data.topic: 'REGISTER/ESP'
@@ -213,7 +236,8 @@ void mgr_CreateModuleList(void) {
         cJSON_AddItemToArray(list, cJSON_CreateString(mgr_reg_list[idx].name));
       }
       if ((ret = cJSON_PrintPreallocated(root, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0)) == 1) {
-        sprintf(msg.payload.mqtt.u.data.topic, mgr_reg_pattern);
+        sprintf(msg.payload.mqtt.u.data.topic, mgr_reg_pattern, mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
+        ESP_LOGD(TAG, "[%s]     topic: '%s'", __func__, msg.payload.mqtt.u.data.topic);
         esp_err_t result = mgr_send_to_mqtt_fn(&msg);
         if (result != ESP_OK) {
           ESP_LOGE(TAG, "[%s] Send() - Error: %d", __func__, result);
@@ -478,6 +502,8 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mgr_eth_mac));
 
       mgr_CreateUid();
+
+      mgr_SendUidToAll();
       break;
     }
 

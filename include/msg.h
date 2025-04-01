@@ -28,6 +28,7 @@ typedef enum {
 
   /* MGR module */
   MSG_TYPE_MGR_LIST,
+  MSG_TYPE_MGR_UID,
 
   /* ETH module */
   MSG_TYPE_ETH_EVENT,
@@ -135,14 +136,20 @@ typedef enum {
 */
 
 
+#define DATA_UID_SIZE       (11U)
 #define DATA_TOPIC_SIZE     (25U)
 #define DATA_MSG_SIZE       (250U)
 #define DATA_JSON_SIZE      (350U)
 
 
+typedef char data_uid_t[DATA_UID_SIZE];
 typedef char data_topic_t[DATA_TOPIC_SIZE];
 typedef char data_msg_t[DATA_MSG_SIZE];
 typedef char data_json_t[DATA_JSON_SIZE];
+
+typedef struct {
+  data_uid_t uid;
+} payload_mgr_t;
 
 /* ETH MAC definition */
 typedef uint8_t data_eth_mac_t[6];
@@ -208,6 +215,7 @@ typedef struct {
   uint32_t        from;
   uint32_t        to;
   union {
+    payload_mgr_t     mgr;
     payload_eth_t     eth;
     payload_cli_t     cli;
     payload_gpio_t    gpio;
