@@ -12,6 +12,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "cJSON.h"
+
 #include "sdkconfig.h"
 
 #include "esp_log.h"
@@ -184,20 +186,46 @@ esp_err_t sensor_RunTsl2561(void) {
   return result;
 }
 
-esp_err_t sensor_SetTsl2561(const sensor_data_t* data) {
+esp_err_t sensor_SetTsl2561(const cJSON* data, cJSON* response) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(data: %p)", __func__, data);
-
+  ESP_LOGI(TAG, "++%s(data: %p, response: %p)", __func__, data, response);
+  int array_cnt = cJSON_GetArraySize(data);
+  if (array_cnt) {
+    for (int idx = 0; idx < array_cnt; ++idx) {
+      const cJSON* item = cJSON_GetArrayItem(data, idx);
+      if (item) {
+        char* str = cJSON_PrintUnformatted(item);
+        ESP_LOGD(TAG, "[%s] item: '%s'", __func__, str);
+      } else {
+        ESP_LOGE(TAG, "[%s] Bad data format.", __func__);
+        ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(item));
+        break;
+      }
+    }
+  }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
-esp_err_t sensor_GetTsl2561(sensor_data_t* data) {
+esp_err_t sensor_GetTsl2561(const cJSON* data, cJSON* response) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(data: %p)", __func__, data);
-
+  ESP_LOGI(TAG, "++%s(data: %p, response: %p)", __func__, data, response);
+  int array_cnt = cJSON_GetArraySize(data);
+  if (array_cnt) {
+    for (int idx = 0; idx < array_cnt; ++idx) {
+      const cJSON* item = cJSON_GetArrayItem(data, idx);
+      if (item) {
+        char* str = cJSON_GetStringValue(item);
+        ESP_LOGD(TAG, "[%s] item: '%s'", __func__, str);
+      } else {
+        ESP_LOGE(TAG, "[%s] Bad data format.", __func__);
+        ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(item));
+        break;
+      }
+    }
+  }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

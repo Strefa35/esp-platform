@@ -12,6 +12,8 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+#include "cJSON.h"
+
 #include "esp_err.h"
 
 #include "sensor_data.h"
@@ -48,13 +50,13 @@ typedef esp_err_t(*sensor_run_f)(void);
  * @brief Sensor's set function
  * @param data - data to be set by the controller in the sensor
  */
-typedef esp_err_t(*sensor_set_f)(const sensor_data_t* data);
+typedef esp_err_t(*sensor_set_f)(const cJSON* data, cJSON* response);
 
 /**
  * @brief Sensor's send function
  * @param data - data to be get by the controller from the sensor
  */
-typedef esp_err_t(*sensor_get_f)(sensor_data_t* data);
+typedef esp_err_t(*sensor_get_f)(const cJSON* data, cJSON* response);
 
 /**
  * @brief Sensor's register struct

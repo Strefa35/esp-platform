@@ -21,6 +21,7 @@
 
 #include "err.h"
 #include "msg.h"
+#include "types.h"
 #include "sensor_ctrl.h"
 #include "sensor_data.h"
 #include "sensor_list.h"
@@ -115,7 +116,6 @@ static esp_err_t initSensors(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-
   for (int idx = 0; idx < SENSOR_LIST_CNT; ++idx) {
     if (sensor_list[idx].init) {
       result = sensor_list[idx].init(sensorCb);
@@ -128,6 +128,66 @@ static esp_err_t initSensors(void) {
   return result;
 }
 
+static sensor_reg_t* findSensor(const char* name) {
+  sensor_reg_t* sensor_slot_ptr = NULL;
+
+  ESP_LOGI(TAG, "++%s(name: '%s')", __func__, name);
+  for (int idx = 0; idx < SENSOR_LIST_CNT; ++idx) {
+    if (strcmp(sensor_list[idx].name, name) == 0) {
+      ESP_LOGD(TAG, "[%s] Sensor '%s' has been found.", __func__, name);
+      sensor_slot_ptr = &sensor_list[idx];
+      break;
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - sensor_slot_ptr: %p", __func__, sensor_slot_ptr);
+  return sensor_slot_ptr;
+}
+
+static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* data) {
+  sensor_reg_t* sensor = findSensor(name);
+  operation_type_e op = convertOperation(op_str);
+  cJSON *response;
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(name: '%s', operation: '%s')", __func__, name, op_str);
+  if (sensor == NULL) {
+    ESP_LOGW(TAG, "[%s] Unknown sensor: '%s'", __func__, name);
+    return ESP_FAIL;
+  }
+  /* create root of json for response */
+  response = cJSON_CreateObject();
+  if (response == NULL)
+  {
+    ESP_LOGW(TAG, "[%s] cJSON_CreateObject() failed", __func__);
+    return ESP_FAIL;
+  }
+
+  switch (op) {
+    case OP_TYPE_SET: {
+      if (sensor->set) {
+        result = sensor->set(data, response);
+      }
+      break;
+    }
+    case OP_TYPE_GET: {
+      if (sensor->get) {
+        result = sensor->get(data, response);
+      }
+      break;
+    }
+    default: {
+      ESP_LOGW(TAG, "[%s] Unknown operation: %s -> %d ['%s']", __func__, op_str, op, GET_OP_TYPE_NAME(op));
+      result = ESP_FAIL;
+      break;
+    }
+  }
+
+  cJSON_Delete(response);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 /**
  * @brief Parse json format payload
  *
@@ -136,18 +196,19 @@ static esp_err_t initSensors(void) {
  * {
  *    "operation": "set",
  *    "sensor": "name-of-sensor",
- *    "threshold": {
- *      "min": value,
- *      "max": value
- *    }
+ *    "data": [ 
+ *       "threshold": {
+ *         "min": value,
+ *         "max": value
+ *       }
+ *    ]
  * }
  *
  * {
  *   "operation": "get",
  *   "sensor": "name-of-sensor",
- *   "list": ["info", threshold", "lux", ...]
+ *   "data": ["info", threshold", "lux", ...]
  * }
-
  * 
  * @return esp_err_t 
  */
@@ -159,19 +220,15 @@ static esp_err_t parseMqttData(const char* json_str) {
   if (root) {
     const cJSON* operation = cJSON_GetObjectItem(root, "operation");
     const cJSON* sensor = cJSON_GetObjectItem(root, "sensor");
-    if (operation && sensor) {
+    const cJSON* data = cJSON_GetObjectItem(root, "data");
+    if (operation && sensor && data) {
       const char* o_str = cJSON_GetStringValue(operation);
       const char* s_str = cJSON_GetStringValue(sensor);
+      
       ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
       ESP_LOGD(TAG, "[%s]    sensor: '%s'", __func__, s_str);
 
-      if (strcmp(o_str, "set") == 0) {
-
-      } else if (strcmp(o_str, "get") == 0) {
-
-      } else {
-        ESP_LOGW(TAG, "[%s] Unknown operation: '%s'", __func__, o_str);
-      }
+      result = useSensor(s_str, o_str, data);
     } else {
       ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
       ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));

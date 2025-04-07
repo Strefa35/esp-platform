@@ -203,16 +203,15 @@ static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
   ESP_LOGI(TAG, "++%s(is_event: %d)", __func__, is_event);
 
   /* create root of json with response/event */
-  cJSON *root = cJSON_CreateObject();
-  if (root != NULL)
-  {
+  cJSON *response = cJSON_CreateObject();
+  if (response != NULL) {
     int ret = -1;
 
     /* add "operation": "response/event" */
-    cJSON_AddStringToObject(root, "operation", (is_event == true ? "event" : "response"));
+    cJSON_AddStringToObject(response, "operation", (is_event == true ? "event" : "response"));
 
     /* add "relays" array */
-    cJSON* relays = cJSON_AddArrayToObject(root, "relays");
+    cJSON* relays = cJSON_AddArrayToObject(response, "relays");
     if (relays) {
       /* add */
       for (int idx = 0; idx < RELAY_LIST_CNT; ++idx) {
@@ -236,7 +235,7 @@ static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
     }
     if (result == ESP_OK) {
       /* Send json to the thread */
-      if ((ret = cJSON_PrintPreallocated(root, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
+      if ((ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
         /* add topic -> ESP/12AB34/relay */
         sprintf(msg.payload.mqtt.u.data.topic, "%s/relay", esp_uid);
 
@@ -249,7 +248,7 @@ static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
       }
 
     }
-    cJSON_Delete(root);
+    cJSON_Delete(response);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
