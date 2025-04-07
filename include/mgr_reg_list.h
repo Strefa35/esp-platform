@@ -121,7 +121,7 @@ static mgr_reg_t mgr_reg_list[] = {
 
 #ifdef CONFIG_SENSOR_CTRL_ENABLE
   {
-    "sensors", REG_SENSOR_CTRL,
+    "sensor", REG_SENSOR_CTRL,
     SensorCtrl_Init, SensorCtrl_Done, SensorCtrl_Run, SensorCtrl_Send
   },
 #endif

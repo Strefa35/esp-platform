@@ -474,7 +474,7 @@ static esp_err_t mgr_ParseMqttData(const msg_t* msg) {
 }
 
 static esp_err_t mgr_ParseMsg(const msg_t* msg) {
-  esp_err_t result = ESP_FAIL;
+  esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(type: %d [%s], from: 0x%08lx, to: 0x%08lx)", __func__, 
       msg->type, GET_MSG_TYPE_NAME(msg->type),
@@ -552,6 +552,8 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
     }
 
     default: {
+      ESP_LOGW(TAG, "[%s] Unknown message type: %d", __func__, msg->type);
+      result = ESP_FAIL;
       break;
     }
   }

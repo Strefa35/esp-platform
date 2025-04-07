@@ -30,6 +30,7 @@ set(REQUIRE_LIST
 #### PRIV_REQUIRE_LIST
 #####################################
 set(PRIV_REQUIRE_LIST 
+  json
 )
 
 list(APPEND SOURCE_LIST sensor_tsl2561.c)

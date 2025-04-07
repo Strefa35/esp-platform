@@ -55,6 +55,7 @@ static QueueHandle_t      mqtt_msg_queue = NULL;
 static TaskHandle_t       mqtt_task_id = NULL;
 static SemaphoreHandle_t  mqtt_sem_id = NULL;
 
+static data_uid_t         esp_uid = {0};
 
 /**
  * @brief MQTT event handler
@@ -302,6 +303,13 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
       result = ESP_TASK_RUN;
       break;
     }
+
+    case MSG_TYPE_MGR_UID: {
+      memcpy(esp_uid, msg->payload.mgr.uid, strlen(msg->payload.mgr.uid) + 1);
+      ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, esp_uid);
+      break;
+    }
+
     case MSG_TYPE_MQTT_START: {
       result = mqttctrl_StartClient();
       if (result != ESP_OK) {
@@ -333,7 +341,9 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
       result = mqttctrl_SubscribeList(msg->payload.mqtt.u.json);
       break;
     }
+
     default: {
+      ESP_LOGW(TAG, "[%s] Unknown message type: %d", __func__, msg->type);
       result = ESP_FAIL;
       break;
     }

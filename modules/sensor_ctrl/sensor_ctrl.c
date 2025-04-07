@@ -15,6 +15,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "cJSON.h"
+
 #include "sdkconfig.h"
 
 #include "err.h"
@@ -41,6 +43,8 @@ static const char* TAG = "ESP::SENSOR";
 static QueueHandle_t      sensor_msg_queue = NULL;
 static TaskHandle_t       sensor_task_id = NULL;
 static SemaphoreHandle_t  sensor_sem_id = NULL;
+
+static data_uid_t         esp_uid = {0};
 
 
 static esp_err_t parseDataTsl2561(const sensor_data_t* data) {
@@ -124,6 +128,60 @@ static esp_err_t initSensors(void) {
   return result;
 }
 
+/**
+ * @brief Parse json format payload
+ *
+ * @param json_str - json message
+ *
+ * {
+ *    "operation": "set",
+ *    "sensor": "name-of-sensor",
+ *    "threshold": {
+ *      "min": value,
+ *      "max": value
+ *    }
+ * }
+ *
+ * {
+ *   "operation": "get",
+ *   "sensor": "name-of-sensor",
+ *   "list": ["info", threshold", "lux", ...]
+ * }
+
+ * 
+ * @return esp_err_t 
+ */
+static esp_err_t parseMqttData(const char* json_str) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(json_str: '%s')", __func__, json_str);
+  cJSON* root = cJSON_Parse(json_str);
+  if (root) {
+    const cJSON* operation = cJSON_GetObjectItem(root, "operation");
+    const cJSON* sensor = cJSON_GetObjectItem(root, "sensor");
+    if (operation && sensor) {
+      const char* o_str = cJSON_GetStringValue(operation);
+      const char* s_str = cJSON_GetStringValue(sensor);
+      ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
+      ESP_LOGD(TAG, "[%s]    sensor: '%s'", __func__, s_str);
+
+      if (strcmp(o_str, "set") == 0) {
+
+      } else if (strcmp(o_str, "get") == 0) {
+
+      } else {
+        ESP_LOGW(TAG, "[%s] Unknown operation: '%s'", __func__, o_str);
+      }
+    } else {
+      ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+      ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+    }
+    cJSON_Delete(root);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t parseMsg(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
@@ -144,7 +202,30 @@ static esp_err_t parseMsg(const msg_t* msg) {
       result = ESP_TASK_RUN;
       break;
     }
+
+    case MSG_TYPE_MGR_UID: {
+      memcpy(esp_uid, msg->payload.mgr.uid, strlen(msg->payload.mgr.uid) + 1);
+      ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, esp_uid);
+      break;
+    }
+
+    case MSG_TYPE_MQTT_EVENT: {
+      data_mqtt_event_e event_id = msg->payload.mqtt.u.event_id;
+      ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, event_id, GET_DATA_MQTT_EVENT_NAME(event_id));
+      break;
+    }
+
+    case MSG_TYPE_MQTT_DATA: {
+      const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
+
+      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, data_ptr->topic);
+      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, data_ptr->msg);
+      result = parseMqttData(data_ptr->msg);
+      break;
+    }
+
     default: {
+      ESP_LOGW(TAG, "[%s] Unknown message type: %d", __func__, msg->type);
       result = ESP_FAIL;
       break;
     }

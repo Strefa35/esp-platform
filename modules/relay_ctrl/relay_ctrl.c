@@ -52,7 +52,7 @@ static QueueHandle_t      relay_msg_queue = NULL;
 static TaskHandle_t       relay_task_id = NULL;
 static SemaphoreHandle_t  relay_sem_id = NULL;
 
-static data_uid_t         relay_uid = {0};
+static data_uid_t         esp_uid = {0};
 
 static relay_t relay_slots[] = {
   {
@@ -238,7 +238,7 @@ static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
       /* Send json to the thread */
       if ((ret = cJSON_PrintPreallocated(root, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
         /* add topic -> ESP/12AB34/relay */
-        sprintf(msg.payload.mqtt.u.data.topic, "%s/relay", relay_uid);
+        sprintf(msg.payload.mqtt.u.data.topic, "%s/relay", esp_uid);
 
         result = MGR_Send(&msg);
         if (result != ESP_OK) {
@@ -331,8 +331,14 @@ static esp_err_t relayctrl_ParseMsg(const msg_t* msg) {
     }
 
     case MSG_TYPE_MGR_UID: {
-      memcpy(relay_uid, msg->payload.mgr.uid, strlen(msg->payload.mgr.uid) + 1);
-      ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, relay_uid);
+      memcpy(esp_uid, msg->payload.mgr.uid, strlen(msg->payload.mgr.uid) + 1);
+      ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, esp_uid);
+      break;
+    }
+
+    case MSG_TYPE_MQTT_EVENT: {
+      data_mqtt_event_e event_id = msg->payload.mqtt.u.event_id;
+      ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, event_id, GET_DATA_MQTT_EVENT_NAME(event_id));
       break;
     }
 
@@ -346,6 +352,7 @@ static esp_err_t relayctrl_ParseMsg(const msg_t* msg) {
     }
 
     default: {
+      ESP_LOGW(TAG, "[%s] Unknown message type: %d", __func__, msg->type);
       result = ESP_FAIL;
       break;
     }
@@ -410,7 +417,7 @@ static esp_err_t relayctrl_Init(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
-  ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, relay_uid);
+  ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, esp_uid);
 
   /* Initialization message queue */
   relay_msg_queue = xQueueCreate(RELAY_MSG_MAX, sizeof(msg_t));
