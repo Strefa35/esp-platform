@@ -140,23 +140,37 @@ Topic: `ESP/12AB34/relay`, Operation: `set/get/event/response`
 
 Topic: `ESP/12AB34/sensor`, Operation: `set/get/event/response`
 
-- Set state for specific relay number:
+- Set :
   ```
   {
     "operation": "set",
     "sensor": "name-of-sensor",
-    "threshold": {
-      "min": value,
-      "max": value
-    }
+    "data": []
   }
   ```
+  ```
+  "data": [
+    {
+      "type": "threshold",
+      "threshold": value
+    },
+    {
+      "type": "lux",
+      "lux": value
+    },
+    {
+      "type": "info",
+      "info": {}
+    },
+  ]
+  ```
+
 - Get list of parameters for specific sensor:
   ```
   {
     "operation": "get",
     "sensor": "name-of-sensor",
-    "list": ["info", threshold", "lux", ...]
+    "data": ["info", threshold", "lux", ...]
   }
   ```
 - Response after get:
@@ -164,28 +178,46 @@ Topic: `ESP/12AB34/sensor`, Operation: `set/get/event/response`
   {
     "operation": "response",
     "sensor": "name-of-sensor",
-    "info": {
-      
-    },
-    "threshold": {
-      "min": value,
-      "max": value
-    },
-    "lux": value,
+    "data": []
   }
+  ```
+  ```
+  "data": [
+    {
+      "type": "threshold",
+      "threshold": value
+    },
+    {
+      "type": "lux",
+      "lux": value
+    },
+    {
+      "type": "info",
+      "info": {}
+    },
+  ]
   ```
 - Event notification for specific sensor:
   ```
   {
     "operation": "event",
     "sensor": "name-of-sensor",
-    "info": {
-      
-    },
-    "threshold": {
-      "min": value,
-      "max": value
-    },
-    "lux": value,
+    "data": []
   }
+  ```
+  ```
+  "data": [
+    {
+      "type": "threshold",
+      "threshold": value
+    },
+    {
+      "type": "lux",
+      "lux": value
+    },
+    {
+      "type": "info",
+      "info": {}
+    },
+  ]
   ```

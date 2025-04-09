@@ -166,12 +166,18 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
     case OP_TYPE_SET: {
       if (sensor->set) {
         result = sensor->set(data, response);
+        ESP_LOGD(TAG, "[%s] OP_TYPE_SET:", __func__);
+        ESP_LOGD(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(data));
+        ESP_LOGD(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(response));
       }
       break;
     }
     case OP_TYPE_GET: {
       if (sensor->get) {
         result = sensor->get(data, response);
+        ESP_LOGD(TAG, "[%s] OP_TYPE_GET:", __func__);
+        ESP_LOGD(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(data));
+        ESP_LOGD(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(response));
       }
       break;
     }
