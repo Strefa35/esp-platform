@@ -52,6 +52,8 @@ typedef struct {
 
 static const char* TAG = "ESP::SENSORS::TSL2561";
 
+static SemaphoreHandle_t tsl2561_sem = NULL;
+
 static sensor_cb_f  tsl2561_cb = NULL;
 
 static threshold_t tsl2561_threshold = {
@@ -91,6 +93,8 @@ static void taskFn(void* param) {
 
   bool on = false;
 
+  xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
+
   ESP_ERROR_CHECK(result = tsl2561_GetLux(handle, &tsl2561_lux));
   ESP_LOGD(TAG, "[%s] LUX: %ld", __func__, tsl2561_lux);
 
@@ -101,9 +105,13 @@ static void taskFn(void* param) {
   tsl2561_threshold.on = on;
   tsl2561_threshold.last_on = !on;
 
+  xSemaphoreGive(tsl2561_sem);
+
   while (loop) {
     ESP_LOGD(TAG, "[%s] Wait... %d ms\n\n", __func__, POLLING_TIME_IN_MS);
     vTaskDelay(pdMS_TO_TICKS(POLLING_TIME_IN_MS));
+
+    xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
 
     ESP_ERROR_CHECK(result = tsl2561_GetLux(handle, &tsl2561_lux));
     ESP_LOGD(TAG, "[%s] LUX: %ld", __func__, tsl2561_lux);
@@ -143,6 +151,7 @@ static void taskFn(void* param) {
         }
       }
     }
+    xSemaphoreGive(tsl2561_sem);
   }
   ESP_ERROR_CHECK(tsl2561_SetPower(handle, false));
   ESP_ERROR_CHECK(tsl2561_Done(handle));
@@ -158,9 +167,10 @@ static esp_err_t sensorSetThreshold(const cJSON* data, cJSON* response) {
     /* get threshold from JSON */
     int threshold = cJSON_GetNumberValue(data);
     ESP_LOGD(TAG, "[%s] threshold: %d", __func__, threshold);
+    xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
     tsl2561_threshold.lux = threshold;
     tsl2561_threshold.cnt = 0;
-
+    xSemaphoreGive(tsl2561_sem);
     result = ESP_OK;
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
@@ -172,7 +182,9 @@ static esp_err_t sensorGetThreshold(cJSON* response) {
 
   ESP_LOGI(TAG, "++%s(response: %p)", __func__, response);
   if (response) {
+    xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
     result = cJSON_AddNumberToObject(response, "threshold", tsl2561_threshold.lux) ? ESP_OK : ESP_FAIL;
+    xSemaphoreGive(tsl2561_sem);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -183,7 +195,9 @@ static esp_err_t sensorGetLux(cJSON* response) {
 
   ESP_LOGI(TAG, "++%s(response: %p)", __func__, response);
   if (response) {
+    xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
     result = cJSON_AddNumberToObject(response, "lux", tsl2561_lux) ? ESP_OK : ESP_FAIL;
+    xSemaphoreGive(tsl2561_sem);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -194,7 +208,9 @@ static esp_err_t sensorGetInfo(cJSON* response) {
 
   ESP_LOGI(TAG, "++%s(response: %p)", __func__, response);
   if (response) {
+    xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
     result = ESP_FAIL;
+    xSemaphoreGive(tsl2561_sem);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -270,7 +286,7 @@ static esp_err_t sensorSet(const cJSON* data, cJSON* response) {
   int array_cnt = cJSON_GetArraySize(data);
   if (array_cnt) {
     for (int idx = 0; idx < array_cnt; ++idx) {
-      result = sensorSetItem(cJSON_GetArrayItem(data, idx), response);
+      result = sensorSetItem(cJSON_GetArrayItem(data, idx), response) | result;
     }
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
@@ -285,7 +301,7 @@ static esp_err_t sensorGet(const cJSON* data, cJSON* response) {
   if (array_cnt) {
     cJSON* resp_array = cJSON_AddArrayToObject(response, "data");
     for (int idx = 0; idx < array_cnt; ++idx) {
-      result = sensorGetDataType(cJSON_GetArrayItem(data, idx), resp_array);
+      result = sensorGetDataType(cJSON_GetArrayItem(data, idx), resp_array) | result;
     }
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
@@ -297,6 +313,11 @@ static esp_err_t sensorInit(const sensor_cb_f cb) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(cb: %p)", __func__, cb);
+  tsl2561_sem = xSemaphoreCreateMutex();
+  if (tsl2561_sem == NULL) {
+    ESP_LOGE(TAG, "[%s] xSemaphoreCreateMutex() failed.", __func__);
+    result = ESP_FAIL;
+  }
   xTaskCreate(taskFn, TASK_NAME, TASK_STACK_SIZE, NULL, TASK_PRIORITY, &task_id);
   if (task_id == NULL)
   {

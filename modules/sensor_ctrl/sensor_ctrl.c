@@ -22,6 +22,7 @@
 #include "err.h"
 #include "msg.h"
 #include "types.h"
+#include "mgr_ctrl.h"
 #include "sensor_ctrl.h"
 #include "sensor_data.h"
 #include "sensor_list.h"
@@ -147,6 +148,12 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
   sensor_reg_t* sensor = findSensor(name);
   operation_type_e op = convertOperation(op_str);
   cJSON *response;
+  msg_t msg = {
+    .type = MSG_TYPE_MQTT_PUBLISH,
+    .from = REG_SENSOR_CTRL,
+    .to = REG_MQTT_CTRL,
+  };
+  bool to_send = true;
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(name: '%s', operation: '%s')", __func__, name, op_str);
@@ -161,6 +168,10 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
     ESP_LOGW(TAG, "[%s] cJSON_CreateObject() failed", __func__);
     return ESP_FAIL;
   }
+
+  cJSON_AddStringToObject(response, "operation", "response");
+  cJSON_AddStringToObject(response, "sensor", name);
+  //cJSON* result_obj = cJSON_AddNumberToObject(response, "result", ESP_OK);
 
   switch (op) {
     case OP_TYPE_SET: {
@@ -183,11 +194,29 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
     }
     default: {
       ESP_LOGW(TAG, "[%s] Unknown operation: %s -> %d ['%s']", __func__, op_str, op, GET_OP_TYPE_NAME(op));
+      to_send = false;
       result = ESP_FAIL;
       break;
     }
   }
 
+  //cJSON_SetNumberValue(result_obj, result);
+
+  /* Send json to the thread */
+  if (to_send) {
+    int ret = -1;
+    if ((ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
+      /* add topic -> ESP/12AB34/sensor */
+      sprintf(msg.payload.mqtt.u.data.topic, "%s/sensor", esp_uid);
+
+      result = MGR_Send(&msg);
+      if (result != ESP_OK) {
+        ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
+      }
+    } else {
+      ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
+    }
+  }
   cJSON_Delete(response);
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
