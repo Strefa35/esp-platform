@@ -64,13 +64,13 @@ We distinguish the following types of operations:
 - get - get request
 - response - set/get response
 
-### REGISTER/ESP
-
+### REGISTER/ESP - Information about connected devices
 After starting, the controller sends information about its configuration.
-Then the controller subscribes to the topic list for each resource resource.
+Then the controller subscribes to the topic list for each resource.
 
-Topic: `REGISTER/ESP`, Operation: `get/event`
-
+#### Event
+- Topic: `REGISTER/ESP`
+- Operation: `event`
 - Notification about controller configuration and list of available modules:
   ```
   {
@@ -81,7 +81,8 @@ Topic: `REGISTER/ESP`, Operation: `get/event`
     "list": ["eth", "mqtt"]
   }
   ```
-
+- Topic: `REGISTER/ESP`
+- Operation: `get`
 - Get current controller configuration:
   ```
   {
@@ -89,10 +90,11 @@ Topic: `REGISTER/ESP`, Operation: `get/event`
   }
   ```
 
-### ESP/12AB34/relay
+### Relay request/response/event
 
-Topic: `ESP/12AB34/relay`, Operation: `set/get/event/response`
-
+#### Request
+- Topic: `ESP/12AB34/req/relay`, 
+- Operation: `set/get`
 - Set state for specific relay number:
   ```
   {
@@ -111,6 +113,9 @@ Topic: `ESP/12AB34/relay`, Operation: `set/get/event/response`
     "operation": "get",
   }
   ```
+#### Response
+- Topic: `ESP/12AB34/res/relay`, 
+- Operation: `response`
 - Response after get:
   ```
   {
@@ -123,7 +128,10 @@ Topic: `ESP/12AB34/relay`, Operation: `set/get/event/response`
     ]
   }
   ```
-- Event notification for specific relays:
+#### Event
+- Topic: `ESP/12AB34/event/relay`, 
+- Operation: `event`
+- Event for specific relays:
   ```
   {
     "operation": "event",
@@ -136,11 +144,12 @@ Topic: `ESP/12AB34/relay`, Operation: `set/get/event/response`
   }
   ```
 
-### ESP/12AB34/sensor
+### Sensor request/response/event
 
-Topic: `ESP/12AB34/sensor`, Operation: `set/get/event/response`
-
-- Set :
+#### Request
+- Topic: `ESP/12AB34/req/sensor`, 
+- Operation: `set/get`
+- Set:
   ```
   {
     "operation": "set",
@@ -164,7 +173,6 @@ Topic: `ESP/12AB34/sensor`, Operation: `set/get/event/response`
     },
   ]
   ```
-
 - Get list of parameters for specific sensor:
   ```
   {
@@ -173,6 +181,10 @@ Topic: `ESP/12AB34/sensor`, Operation: `set/get/event/response`
     "data": ["info", threshold", "lux", ...]
   }
   ```
+#### Response
+- Topic: `ESP/12AB34/res/sensor`, 
+- Operation: `response`
+- Sensor: `name-of-sensor`
 - Response after get:
   ```
   {
@@ -197,7 +209,11 @@ Topic: `ESP/12AB34/sensor`, Operation: `set/get/event/response`
     },
   ]
   ```
-- Event notification for specific sensor:
+#### Event
+- Topic: `ESP/12AB34/event/relay`, 
+- Operation: `event`
+- Sensor: `name-of-sensor`
+- Event for specific sensor:
   ```
   {
     "operation": "event",

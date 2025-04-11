@@ -236,8 +236,8 @@ static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
     if (result == ESP_OK) {
       /* Send json to the thread */
       if ((ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
-        /* add topic -> ESP/12AB34/relay */
-        sprintf(msg.payload.mqtt.u.data.topic, "%s/relay", esp_uid);
+        /* add topic -> ESP/12AB34/res/relay */
+        sprintf(msg.payload.mqtt.u.data.topic, "%s/res/relay", esp_uid);
 
         result = MGR_Send(&msg);
         if (result != ESP_OK) {

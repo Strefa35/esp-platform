@@ -80,7 +80,7 @@ static char mgr_uid_pattern[]     = "ESP/%02X%02X%02X";
 static char mgr_mac_pattern[]     = "%02X:%02X:%02X:%02X:%02X:%02X";
 static char mgr_ip_pattern[]      = "%d.%d.%d.%d";
 
-static char mgr_topic_pattern[] = "%s/%s";
+static char mgr_topic_pattern[] = "%s/req/%s";
 
 static char mgr_uid[MGR_UID_LEN + 1]  = {}; /* keeps only UID, as: ESP/12AB34 */
 static char mgr_mac[MGR_MAC_LEN + 1]  = {}; /* keeps only MAC, as: 12:34:56:78:90:AB */
@@ -263,10 +263,10 @@ void mgr_CreateModuleList(void) {
  * @brief Send message with topic to subscribe for every module
  *
  * topic: STRING format
- *   ESP/12AB34/topic_1 - 1st topic
- *   ESP/12AB34/topic_2 - 2nd topic
+ *   ESP/12AB34/req/topic_1 - 1st topic
+ *   ESP/12AB34/req/topic_2 - 2nd topic
  *   ...
- *   ESP/12AB34/topic_n - n topic
+ *   ESP/12AB34/req/topic_n - n topic
  *
  */
 void mgr_SubscribeTopic(void) {
@@ -305,7 +305,7 @@ void mgr_SubscribeTopic(void) {
  *
  * json: JSON format
  *   {
- *     "topics": ["ESP_12AB34/cmd/eth", "ESP_12AB34/cmd/mqtt"],
+ *     "topics": ["ESP_12AB34/req/eth", "ESP_12AB34/req/mqtt"],
  *   }
  *
  */
@@ -458,7 +458,7 @@ static esp_err_t mgr_ParseMqttData(const msg_t* msg) {
     ESP_LOGD(TAG, "[%s] Find a module: '%s'", __func__, &(data_ptr->topic[MGR_UID_LEN + 1]));
     for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
       ESP_LOGD(TAG, "[%s] Registered module: '%s' on idx: %d", __func__, mgr_reg_list[idx].name, idx);
-      if (memcmp(&(data_ptr->topic[MGR_UID_LEN + 1]), mgr_reg_list[idx].name, strlen(mgr_reg_list[idx].name)) == 0) {
+      if (strstr(&(data_ptr->topic[MGR_UID_LEN + 1]), mgr_reg_list[idx].name) != NULL) {
         ESP_LOGD(TAG, "[%s] Module '%s' found.", __func__, mgr_reg_list[idx].name);
         if (mgr_reg_list[idx].send_fn) {
           result = mgr_reg_list[idx].send_fn(msg);

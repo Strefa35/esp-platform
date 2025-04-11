@@ -206,8 +206,8 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
   if (to_send) {
     int ret = -1;
     if ((ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
-      /* add topic -> ESP/12AB34/sensor */
-      sprintf(msg.payload.mqtt.u.data.topic, "%s/sensor", esp_uid);
+      /* add topic -> ESP/12AB34/res/sensor */
+      sprintf(msg.payload.mqtt.u.data.topic, "%s/res/sensor", esp_uid);
 
       result = MGR_Send(&msg);
       if (result != ESP_OK) {
