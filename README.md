@@ -210,7 +210,7 @@ Then the controller subscribes to the topic list for each resource.
   ]
   ```
 #### Event
-- Topic: `ESP/12AB34/event/relay`, 
+- Topic: `ESP/12AB34/event/sensor`, 
 - Operation: `event`
 - Sensor: `name-of-sensor`
 - Event for specific sensor:
