@@ -33,15 +33,6 @@
 
 #define POLLING_TIME_IN_MS      (1000)
 
-typedef enum {
-  DATA_TYPE_UNKNOWN,
-  DATA_TYPE_THRESHOLD,
-  DATA_TYPE_LUX,
-  DATA_TYPE_INFO,
-
-  DATA_TYPE_MAX
-} data_type_e;
-
 typedef struct {
   uint16_t  lux;
   uint8_t   cnt;
@@ -55,6 +46,7 @@ static const char* TAG = "ESP::SENSORS::TSL2561";
 static SemaphoreHandle_t tsl2561_sem = NULL;
 
 static sensor_cb_f  tsl2561_cb = NULL;
+static void*        tsl2561_cb_param = NULL;
 
 static threshold_t tsl2561_threshold = {
   .lux = 1000,
@@ -65,99 +57,6 @@ static threshold_t tsl2561_threshold = {
 
 static uint32_t tsl2561_lux = 0;
 
-/**
- * @brief TSL2561 task
- * 
- * @param param 
- */
-static void taskFn(void* param) {
-  tsl2561_t handle = NULL;
-  bool loop = true;
-
-  bool     power = false;
-  uint8_t  id = 0;
-
-  sensor_data_t data = {
-    .type = SENSOR_TYPE_TSL2561
-  };
-
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s()", __func__);
-
-  ESP_ERROR_CHECK(tsl2561_Init(&handle));
-  ESP_ERROR_CHECK(tsl2561_GetPower(handle, &power));
-  ESP_ERROR_CHECK(tsl2561_GetId(handle, &id));
-  ESP_LOGD(TAG, "[%s] Power: %d", __func__, power);
-  ESP_LOGD(TAG, "[%s]    Id: 0x%02X", __func__, id);
-
-  bool on = false;
-
-  xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
-
-  ESP_ERROR_CHECK(result = tsl2561_GetLux(handle, &tsl2561_lux));
-  ESP_LOGD(TAG, "[%s] LUX: %ld", __func__, tsl2561_lux);
-
-  /* Initial Threshold Setting */
-  if (tsl2561_lux > tsl2561_threshold.lux) {
-    on = true;
-  }
-  tsl2561_threshold.on = on;
-  tsl2561_threshold.last_on = !on;
-
-  xSemaphoreGive(tsl2561_sem);
-
-  while (loop) {
-    ESP_LOGD(TAG, "[%s] Wait... %d ms\n\n", __func__, POLLING_TIME_IN_MS);
-    vTaskDelay(pdMS_TO_TICKS(POLLING_TIME_IN_MS));
-
-    xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
-
-    ESP_ERROR_CHECK(result = tsl2561_GetLux(handle, &tsl2561_lux));
-    ESP_LOGD(TAG, "[%s] LUX: %ld", __func__, tsl2561_lux);
-    if (tsl2561_lux > tsl2561_threshold.lux) {
-      on = true;
-    } else {
-      on = false;
-    }
-
-    if (on == tsl2561_threshold.on) {
-      ++tsl2561_threshold.cnt;
-      ESP_LOGV(TAG, "[%s] KEEP -> cnt: %d, on: %d", __func__, tsl2561_threshold.cnt, on);
-    } else {
-      /* when level changed then reset tsl2561_threshold.cnt and wait to tsl2561_threshold.max */
-      tsl2561_threshold.on = on;
-      tsl2561_threshold.cnt = 0;
-      ESP_LOGV(TAG, "[%s] RESET -> cnt: %d, on: %d", __func__, tsl2561_threshold.cnt, on);
-    }
-
-    /* when level stay during tsl2561_threshold.max then notify about change level */
-    if (tsl2561_threshold.cnt >= tsl2561_threshold.max) {
-      ESP_LOGV(TAG, "[%s] tsl2561_threshold ==> Lux: %ld, max: %d, on: %d", __func__, tsl2561_lux, tsl2561_threshold.lux, on);
-      tsl2561_threshold.cnt = 0;
-      /* if current level is different that last the notify */
-      if (on != tsl2561_threshold.last_on) {
-        ESP_LOGV(TAG, "[%s] LEVEL -> %d -> %d", __func__, tsl2561_threshold.last_on, on);
-        tsl2561_threshold.last_on = on;
-        if (tsl2561_cb) {
-
-          data.dtype = SENSOR_DATA_LUX;
-          data.u.uint32[0] = tsl2561_lux;
-
-          result = tsl2561_cb(&data);
-          if (result != ESP_OK) {
-            ESP_LOGE(TAG, "[%s] tsl2561_cb(.dtype: %d) failed.", __func__, data.dtype);
-          }
-        }
-      }
-    }
-    xSemaphoreGive(tsl2561_sem);
-  }
-  ESP_ERROR_CHECK(tsl2561_SetPower(handle, false));
-  ESP_ERROR_CHECK(tsl2561_Done(handle));
-
-  ESP_LOGI(TAG, "--%s()", __func__);
-}
 
 static esp_err_t sensorSetThreshold(const cJSON* data, cJSON* response) {
   esp_err_t result = ESP_FAIL;
@@ -279,6 +178,141 @@ static esp_err_t sensorSetItem(const cJSON* item, cJSON* response) {
   return result;
 }
 
+static esp_err_t sensorSetEventData(const sensor_data_e dtype, cJSON* data) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(dtype::%d, event: %p)", __func__, dtype, data);
+  cJSON* item = cJSON_CreateObject();
+  if (item) {
+    switch (dtype) {
+      case SENSOR_DATA_INFO: {
+        cJSON_AddStringToObject(item, "type", "info");
+        result = sensorGetInfo(item);
+        break;
+      }
+      case SENSOR_DATA_THERSHOLD: {
+        cJSON_AddStringToObject(item, "type", "threshold");
+        result = sensorGetThreshold(item);
+        break;
+      }
+      case SENSOR_DATA_LUX: {
+        cJSON_AddStringToObject(item, "type", "lux");
+        result = sensorGetLux(item);
+        break;
+      }
+      default: {
+        break;
+      }
+    }
+    if (result == ESP_OK) {
+      cJSON_AddItemToArray(data, item);
+    } else {
+      cJSON_Delete(item);
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief TSL2561 task
+ *
+ * @param param
+ */
+static void sensorTaskFn(void* param) {
+  tsl2561_t handle = NULL;
+  bool loop = true;
+
+  bool     power = false;
+  uint8_t  id = 0;
+
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  ESP_ERROR_CHECK(tsl2561_Init(&handle));
+  ESP_ERROR_CHECK(tsl2561_GetPower(handle, &power));
+  ESP_ERROR_CHECK(tsl2561_GetId(handle, &id));
+  ESP_LOGD(TAG, "[%s] Power: %d", __func__, power);
+  ESP_LOGD(TAG, "[%s]    Id: 0x%02X", __func__, id);
+
+  bool on = false;
+
+  xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
+
+  ESP_ERROR_CHECK(result = tsl2561_GetLux(handle, &tsl2561_lux));
+  ESP_LOGD(TAG, "[%s] LUX: %ld", __func__, tsl2561_lux);
+
+  /* Initial Threshold Setting */
+  if (tsl2561_lux > tsl2561_threshold.lux) {
+    on = true;
+  }
+  tsl2561_threshold.on = on;
+  tsl2561_threshold.last_on = !on;
+
+  xSemaphoreGive(tsl2561_sem);
+
+  while (loop) {
+    bool send_event = false;
+
+    ESP_LOGD(TAG, "[%s] Wait... %d ms\n\n", __func__, POLLING_TIME_IN_MS);
+    vTaskDelay(pdMS_TO_TICKS(POLLING_TIME_IN_MS));
+
+    xSemaphoreTake(tsl2561_sem, portMAX_DELAY);
+
+    ESP_ERROR_CHECK(result = tsl2561_GetLux(handle, &tsl2561_lux));
+    ESP_LOGD(TAG, "[%s] LUX: %ld", __func__, tsl2561_lux);
+    if (tsl2561_lux > tsl2561_threshold.lux) {
+      on = true;
+    } else {
+      on = false;
+    }
+
+    if (on == tsl2561_threshold.on) {
+      ++tsl2561_threshold.cnt;
+      ESP_LOGV(TAG, "[%s] KEEP -> cnt: %d, on: %d", __func__, tsl2561_threshold.cnt, on);
+    } else {
+      /* when level changed then reset tsl2561_threshold.cnt and wait to tsl2561_threshold.max */
+      tsl2561_threshold.on = on;
+      tsl2561_threshold.cnt = 0;
+      ESP_LOGV(TAG, "[%s] RESET -> cnt: %d, on: %d", __func__, tsl2561_threshold.cnt, on);
+    }
+
+    /* when level stay during tsl2561_threshold.max then notify about change level */
+    if (tsl2561_threshold.cnt >= tsl2561_threshold.max) {
+      ESP_LOGV(TAG, "[%s] tsl2561_threshold ==> Lux: %ld, max: %d, on: %d", __func__, tsl2561_lux, tsl2561_threshold.lux, on);
+      tsl2561_threshold.cnt = 0;
+      /* if current level is different that last the notify */
+      if (on != tsl2561_threshold.last_on) {
+        ESP_LOGV(TAG, "[%s] LEVEL -> %d -> %d", __func__, tsl2561_threshold.last_on, on);
+        tsl2561_threshold.last_on = on;
+        send_event = true;
+      }
+    }
+    xSemaphoreGive(tsl2561_sem);
+
+    if (send_event) {
+      send_event = false;
+      if (tsl2561_cb) {
+        cJSON* data = cJSON_CreateArray();
+        if (data) {
+          result = sensorSetEventData(SENSOR_DATA_LUX, data);
+          result = tsl2561_cb(data, tsl2561_cb_param);
+          if (result != ESP_OK) {
+            ESP_LOGE(TAG, "[%s] tsl2561_cb() failed.", __func__);
+            cJSON_Delete(data);
+          }
+        }
+      }
+    }
+
+  }
+  ESP_ERROR_CHECK(tsl2561_SetPower(handle, false));
+  ESP_ERROR_CHECK(tsl2561_Done(handle));
+
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
 static esp_err_t sensorSet(const cJSON* data, cJSON* response) {
   esp_err_t result = ESP_OK;
 
@@ -308,7 +342,7 @@ static esp_err_t sensorGet(const cJSON* data, cJSON* response) {
   return result;
 }
 
-static esp_err_t sensorInit(const sensor_cb_f cb) {
+static esp_err_t sensorInit(const sensor_cb_f cb, void* param) {
   TaskHandle_t task_id = NULL;
   esp_err_t result = ESP_OK;
 
@@ -318,13 +352,14 @@ static esp_err_t sensorInit(const sensor_cb_f cb) {
     ESP_LOGE(TAG, "[%s] xSemaphoreCreateMutex() failed.", __func__);
     result = ESP_FAIL;
   }
-  xTaskCreate(taskFn, TASK_NAME, TASK_STACK_SIZE, NULL, TASK_PRIORITY, &task_id);
+  tsl2561_cb = cb;
+  tsl2561_cb_param = param;
+  xTaskCreate(sensorTaskFn, TASK_NAME, TASK_STACK_SIZE, NULL, TASK_PRIORITY, &task_id);
   if (task_id == NULL)
   {
     ESP_LOGE(TAG, "[%s] xTaskCreate() failed.", __func__);
     result = ESP_FAIL;
   }
-  tsl2561_cb = cb;
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -333,13 +368,13 @@ static esp_err_t sensorInit(const sensor_cb_f cb) {
   API functions
 -----------------------------------------------------------------*/
 
-esp_err_t sensor_InitTsl2561(const sensor_cb_f cb) {
+esp_err_t sensor_InitTsl2561(const sensor_cb_f cb, void* param) {
   esp_err_t result = ESP_OK;
 
   esp_log_level_set(TAG, CONFIG_SENSOR_TSL2561_LOG_LEVEL);
 
-  ESP_LOGI(TAG, "++%s(cb: %p)", __func__, cb);
-  result = sensorInit(cb);
+  ESP_LOGI(TAG, "++%s(cb: %p, param: %p)", __func__, cb, param);
+  result = sensorInit(cb, param);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

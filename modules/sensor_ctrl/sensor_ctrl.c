@@ -49,65 +49,50 @@ static SemaphoreHandle_t  sensor_sem_id = NULL;
 static data_uid_t         esp_uid = {0};
 
 
-static esp_err_t parseDataTsl2561(const sensor_data_t* data) {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s(data: %p)", __func__, data);
-  ESP_LOGD(TAG, "[%s] data type: %d [%s]", __func__,
-        data->dtype, GET_SENSOR_DATA_NAME(data->dtype));
-  switch (data->dtype) {
-    case SENSOR_DATA_INFO: {
-      break;
-    }
-    case SENSOR_DATA_THERSHOLD: {
-      break;
-    }
-    case SENSOR_DATA_LUX: {
-      ESP_LOGD(TAG, "[%s] LUX: %ldlx", __func__, data->u.int32[0]);
-      break;
-    }
-    default: {
-      ESP_LOGW(TAG, "[%s] Unknown data type: %d from sensor: %d [%s]", __func__,
-        data->dtype, data->type, GET_SENSOR_TYPE_NAME(data->type));
-      result = ESP_FAIL;
-      break;
-    }
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
-static esp_err_t parseData(const sensor_data_t* data) {
-  esp_err_t result = ESP_OK;
-  
-  ESP_LOGI(TAG, "++%s(data: %p)", __func__, data);
-  ESP_LOGD(TAG, "[%s] DATA: type: %d [%s], dtype: %d [%s]", __func__, 
-        data->type, GET_SENSOR_TYPE_NAME(data->type), 
-        data->dtype, GET_SENSOR_DATA_NAME(data->dtype));
-  switch (data->type) {
-    case SENSOR_TYPE_TSL2561: {
-      result = parseDataTsl2561(data);
-      break;
-    }
-    default: {
-      ESP_LOGW(TAG, "[%s] Unknown sensor: type: %d, dtype: %d", __func__, data->type, data->dtype);
-      result = ESP_FAIL;
-      break;
-    }
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
-
-static esp_err_t sensorCb(const sensor_data_t* data) {
+static esp_err_t sensorCb(cJSON* data, void* param) {
   esp_err_t result = ESP_FAIL;
 
-  ESP_LOGI(TAG, "++%s(data: %p)", __func__, data);
+  ESP_LOGI(TAG, "++%s(data: %p, param: %p)", __func__, data, param);
   if (data) {
-    result = parseData(data);
-  } else {
-    ESP_LOGE(TAG, "[%s] data = NULL", __func__);
-    result = ESP_ERR_INVALID_ARG;
+    msg_t msg = {
+      .type = MSG_TYPE_MQTT_PUBLISH,
+      .from = REG_SENSOR_CTRL,
+      .to = REG_MQTT_CTRL,
+    };
+    uint32_t idx = (uint32_t) param;
+
+    if (idx >= SENSOR_LIST_CNT) {
+      ESP_LOGW(TAG, "[%s] Passed param: %ld is wrong", __func__, idx);
+      return result;
+    }
+
+    /* create root of json for event */
+    cJSON* event = cJSON_CreateObject();
+    if (event == NULL)
+    {
+      ESP_LOGW(TAG, "[%s] cJSON_CreateObject() failed", __func__);
+      return ESP_FAIL;
+    }
+
+    cJSON_AddStringToObject(event, "operation", "event");
+    cJSON_AddStringToObject(event, "sensor", sensor_list[idx].name);
+    cJSON_AddItemToObject(event, "data", data);
+
+
+
+    int ret = -1;
+    if ((ret = cJSON_PrintPreallocated(event, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
+      /* add topic -> ESP/12AB34/event/sensor */
+      sprintf(msg.payload.mqtt.u.data.topic, "%s/event/sensor", esp_uid);
+
+      result = MGR_Send(&msg);
+      if (result != ESP_OK) {
+        ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
+      }
+    } else {
+      ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
+    }
+    cJSON_Delete(event);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -117,9 +102,9 @@ static esp_err_t initSensors(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  for (int idx = 0; idx < SENSOR_LIST_CNT; ++idx) {
+  for (uint32_t idx = 0; idx < SENSOR_LIST_CNT; ++idx) {
     if (sensor_list[idx].init) {
-      result = sensor_list[idx].init(sensorCb);
+      result = sensor_list[idx].init(sensorCb, (void*) idx);
       if (result != ESP_OK) {
         ESP_LOGE(TAG, "[%s] tsl2561_InitSensor() failed.", __func__);
       }

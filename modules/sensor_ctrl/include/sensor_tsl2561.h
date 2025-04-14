@@ -21,7 +21,7 @@
 #include "sensor_reg.h"
 
 
-esp_err_t sensor_InitTsl2561(const sensor_cb_f cb);
+esp_err_t sensor_InitTsl2561(const sensor_cb_f cb, void* param);
 esp_err_t sensor_DoneTsl2561(void);
 esp_err_t sensor_RunTsl2561(void);
 esp_err_t sensor_SetTsl2561(const cJSON* data, cJSON* response);

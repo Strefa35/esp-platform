@@ -26,15 +26,16 @@ typedef char sensor_name_t[SENSOR_NAME_MAX];
 /**
  * @brief Callback function will be used to notify sensor controler 
  *        about data from the registered sensor
- * @param data - data that the sensor wants to send to the controller
+ * @param event - event in JSON format
  */
-typedef esp_err_t(*sensor_cb_f)(const sensor_data_t* data);
+typedef esp_err_t(*sensor_cb_f)(cJSON* event, void* param);
 
 /**
  * @brief Sensor's init function
  * @param cb - callback function for sending data
+ * @param param - private param must be passed to the callback
  */
-typedef esp_err_t(*sensor_init_f)(const sensor_cb_f cb);
+typedef esp_err_t(*sensor_init_f)(const sensor_cb_f cb, void* param);
 
 /**
  * @brief Sensor's done function
