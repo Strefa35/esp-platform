@@ -90,6 +90,24 @@ Then the controller subscribes to the topic list for each resource.
   }
   ```
 
+### MQTT request
+
+#### Request
+- Topic: `ESP/12AB34/req/mqtt`, 
+- Operation: `set/get`
+- Set broker ip and port:
+  ```
+  {
+    "operation": "set",
+    "broker": { 
+      "address": {
+        "uri": "mqtt-broker-uri",
+        "port": value
+      }
+    }
+  }
+  ```
+
 ### Relay request/response/event
 
 #### Request

@@ -22,6 +22,7 @@
 #include "sdkconfig.h"
 
 #include "msg.h"
+#include "nvs_ctrl.h"
 #include "mgr_ctrl.h"
 #include "mqtt_ctrl.h"
 
@@ -56,6 +57,17 @@ static TaskHandle_t       mqtt_task_id = NULL;
 static SemaphoreHandle_t  mqtt_sem_id = NULL;
 
 static data_uid_t         esp_uid = {0};
+
+static char               mqtt_buffer[20];
+
+typedef struct {
+  char      uri[20];
+  uint32_t  port;
+} mqttctrl_address_t;
+
+static mqttctrl_address_t mqtt_address;
+static nvs_t mqtt_nvs_handle = NULL;
+
 
 /**
  * @brief MQTT event handler
@@ -284,6 +296,89 @@ static esp_err_t mqttctrl_SubscribeList(const char* json_ptr) {
   return result;
 }
 
+static esp_err_t mqttctrl_SetAddress(const cJSON* address) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(address: %p)", __func__, address);
+  if (address) {
+    char* uri = NULL;
+    uint32_t port = 0;
+
+    cJSON* obj = cJSON_GetObjectItem(address, "uri");
+    if (cJSON_IsString(obj)) {
+      uri = cJSON_GetStringValue(obj);
+    }
+    obj = cJSON_GetObjectItem(address, "port");
+    if (cJSON_IsNumber(obj)) {
+      port = (uint32_t) cJSON_GetNumberValue(obj);
+    }
+
+    if (uri) {
+      memcpy(&mqtt_address.uri, uri, strlen(uri));
+    }
+
+    if ((port > 0) && (port <= 65535)) {
+      mqtt_address.port = port;
+    }
+
+    ESP_LOGD(TAG, "[%s] uri: '%s', port: %ld", __func__, uri ? uri : "---", port);
+
+    if (mqtt_nvs_handle) {
+      NVS_Write(mqtt_nvs_handle, "address", &mqtt_address, sizeof(mqttctrl_address_t));
+    }
+
+  } else {
+    ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_SetBroker(const cJSON* broker) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(broker: %p)", __func__, broker);
+  if (broker) {
+    result = mqttctrl_SetAddress(cJSON_GetObjectItem(broker, "address"));
+    ESP_LOGD(TAG, "[%s] broker: '%s'", __func__, cJSON_PrintUnformatted(broker));
+  } else {
+    ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_ParseMqttData(const char* json_str) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(json_str: '%s')", __func__, json_str);
+  cJSON* root = cJSON_Parse(json_str);
+  if (root == NULL) {
+    ESP_LOGE(TAG, "[%s] Unknown root: '%s'", __func__, json_str);
+    return ESP_FAIL;
+  }
+
+  const cJSON* operation = cJSON_GetObjectItem(root, "operation");
+  if (operation) {
+    const char* o_str = cJSON_GetStringValue(operation);
+    ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
+    if (strcmp(o_str, "set") == 0) {
+      result = mqttctrl_SetBroker(cJSON_GetObjectItem(root, "broker"));
+
+    } else if (strcmp(o_str, "get") == 0) {
+
+    } else {
+      ESP_LOGW(TAG, "[%s] Unknown operation: '%s'", __func__, o_str);
+    }
+  } else {
+    ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+    ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+  }
+  cJSON_Delete(root);
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
@@ -324,7 +419,11 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
       break;
     }
     case MSG_TYPE_MQTT_DATA: {
-      ESP_LOGD(TAG, "[%s] data", __func__);
+      const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
+
+      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, data_ptr->topic);
+      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, data_ptr->msg);
+      result = mqttctrl_ParseMqttData(data_ptr->msg);
       break;
     }
     case MSG_TYPE_MQTT_PUBLISH: {
@@ -408,6 +507,22 @@ static esp_err_t mqttctrl_Init(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
+  memset(&mqtt_address, 0x00, sizeof(mqttctrl_address_t));
+
+  result = NVS_Open("mqtt-ctrl", &mqtt_nvs_handle);
+  if (result == ESP_OK) {
+    size_t data_size = sizeof(mqttctrl_address_t);
+
+    result = NVS_Read(mqtt_nvs_handle, "address", &mqtt_address, &data_size);
+    if (result == ESP_OK) {
+      ESP_LOGD(TAG, "[%s] NVS_Read() -> uri: '%s', port: %ld", __func__, mqtt_address.uri, mqtt_address.port);
+    } else {
+      ESP_LOGE(TAG, "[%s] NVS_Read() - result: %d.", __func__, result);
+    }
+  } else {
+    ESP_LOGE(TAG, "[%s] Cannot open 'mqtt-ctrl' partition - result: %d.", __func__, result);
+  }
+  
   /* Initialization message queue */
   mqtt_msg_queue = xQueueCreate(MQTT_MSG_MAX, sizeof(msg_t));
   if (mqtt_msg_queue == NULL)
@@ -466,6 +581,11 @@ static esp_err_t mqttctrl_Done(void) {
     vQueueDelete(mqtt_msg_queue);
     ESP_LOGD(TAG, "[%s] Queue deleted", __func__);
   }
+
+  if (mqtt_nvs_handle) {
+    NVS_Close(mqtt_nvs_handle);
+  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
