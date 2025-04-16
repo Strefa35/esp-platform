@@ -12,6 +12,7 @@
 #include "esp_log.h"
 #include "esp_err.h"
 
+#include "nvs_ctrl.h"
 #include "mgr_ctrl.h"
 
 
@@ -27,6 +28,12 @@ void app_main(void) {
   esp_log_level_set(TAG, CONFIG_MAIN_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
+
+  result = NVS_Init();
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s]() - NVS_Init() failed", __func__);
+  }
+
   result = MGR_Init();
   if (result != ESP_OK) {
     ESP_LOGE(TAG, "[%s]() - MGR_Init() failed", __func__);
@@ -40,6 +47,11 @@ void app_main(void) {
   result = MGR_Done();
   if (result != ESP_OK) {
     ESP_LOGE(TAG, "[%s]() - MGR_Done() failed", __func__);
+  }
+
+  result = NVS_Done();
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s]() - NVS_Done() failed", __func__);
   }
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);

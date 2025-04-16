@@ -5,6 +5,7 @@ message(STATUS "=========| MAIN |==================================")
 #####################################
 set(SOURCE_LIST
   main.c 
+  nvs_ctrl.c
   mgr_ctrl.c
 )
 
@@ -25,7 +26,7 @@ set(REQUIRE_LIST
 #### PRIV_REQUIRE_LIST
 #####################################
 set(PRIV_REQUIRE_LIST 
-  fmt json
+  nvs_flash fmt json
 )
 
 if(CONFIG_ETH_CTRL_ENABLE)
