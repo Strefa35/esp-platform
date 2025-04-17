@@ -31,24 +31,31 @@
 #include "mqtt_lut.h"
 
 
-/* Temporary Broker URL - should be taken from NVM */
-#define CONFIG_BROKER_URL       "mqtt://10.0.0.10"
+#define MQTT_TASK_NAME            "mqtt-task"
+#define MQTT_TASK_STACK_SIZE      4096
+#define MQTT_TASK_PRIORITY        9
 
-#define MQTT_TASK_NAME          "mqtt-task"
-#define MQTT_TASK_STACK_SIZE    4096
-#define MQTT_TASK_PRIORITY      9
+#define MQTT_MSG_MAX              10
 
-#define MQTT_MSG_MAX            10
+#define MQTT_TOPIC_MAX_LEN        (32U)
+#define MQTT_UID_LEN              (10U)
+#define MQTT_TOPIC_LEN            (MQTT_TOPIC_MAX_LEN - MQTT_UID_LEN - 1)
 
-#define MQTT_TOPIC_MAX_LEN      (32U)
-#define MQTT_UID_LEN            (10U)
-#define MQTT_TOPIC_LEN          (MQTT_TOPIC_MAX_LEN - MQTT_UID_LEN - 1)
+#define MQTT_UID_IDX              (0U)
+#define MQTT_TOPIC_IDX            (10U)
 
-#define MQTT_UID_IDX            (0U)
-#define MQTT_TOPIC_IDX          (10U)
+/* Temporary Broker URL - should be taken from NVS */
+#define CONFIG_BROKER_URL           "mqtt://10.0.0.10"
+#define CONFIG_BROKER_PORT          1883
 
+#define MQTT_NVS_NAME_SIZE          (20U)
+#define MQTT_URI_SIZE               (30U)
 
-static const char* TAG = "ESP::MQTT";
+#define MQTT_NVS_PARTITION_MAIN     "mqtt-ctrl"
+#define MQTT_NVS_PARTITION_BACKUP   "mqtt-ctrl.backup"
+
+#define MQTT_NVS_FAILS_MAX          3
+
 
 static esp_mqtt_client_handle_t mqtt_client = NULL;
 
@@ -58,15 +65,37 @@ static SemaphoreHandle_t  mqtt_sem_id = NULL;
 
 static data_uid_t         esp_uid = {0};
 
-static char               mqtt_buffer[20];
+typedef enum {
+  MQTT_NVS_MAIN,
+  MQTT_NVS_BACKUP,
+  MQTT_NVS_MAX
+} mqtt_nvs_e;
 
 typedef struct {
-  char      uri[20];
+  uint8_t   fails;
+  char      uri[MQTT_URI_SIZE];
   uint32_t  port;
-} mqttctrl_address_t;
+} mqtt_config_t;
 
-static mqttctrl_address_t mqtt_address;
-static nvs_t mqtt_nvs_handle = NULL;
+typedef struct {
+  nvs_t handle;
+  char  name[MQTT_NVS_NAME_SIZE];
+  mqtt_config_t config;
+} mqtt_nvs_t;
+
+static mqtt_nvs_t mqtt_nvs_slots[MQTT_NVS_MAX] = {
+  {
+    NULL, MQTT_NVS_PARTITION_MAIN,
+    { 0, CONFIG_BROKER_URL, CONFIG_BROKER_PORT },
+  },
+  {
+    NULL, MQTT_NVS_PARTITION_BACKUP,
+    { 0, CONFIG_BROKER_URL, CONFIG_BROKER_PORT },
+  }
+};
+
+
+static const char* TAG = "ESP::MQTT";
 
 
 /**
@@ -95,6 +124,11 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
       break;
     }
     case MQTT_EVENT_DISCONNECTED: {
+      msg.type = MSG_TYPE_MQTT_EVENT;
+      msg.from = REG_MQTT_CTRL;
+      msg.to = REG_ALL_CTRL;
+      msg.payload.mqtt.u.event_id = DATA_MQTT_EVENT_DISCONNECTED;
+      send = true;
       break;
     }
     case MQTT_EVENT_SUBSCRIBED: {
@@ -234,6 +268,82 @@ static esp_err_t mqttctrl_StopClient(void) {
   return result;
 }
 
+static esp_err_t mqttctrl_ReadConfig(nvs_t handle, mqtt_config_t* config_ptr, size_t* config_size) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(handle: %p, config_ptr: %p, *config_size: %d)", __func__,
+        handle, config_ptr, *config_size);
+  result = NVS_Read(handle, "config", config_ptr, config_size);
+  if (result == ESP_OK) {
+    ESP_LOGD(TAG, "[%s] NVS_Read(handle: %p) -> fails: %d, uri: '%s', port: %ld", __func__, 
+          handle, config_ptr->fails, config_ptr->uri, config_ptr->port);
+  } else {
+    ESP_LOGE(TAG, "[%s] NVS_Read() failed - result: %d.", __func__, result);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_WriteConfig(nvs_t handle, mqtt_config_t* config_ptr, size_t config_size) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(handle: %p, config_ptr: %p, config_size: %d)", __func__,
+        handle, config_ptr, config_size);
+  result = NVS_Write(handle, "config", config_ptr, config_size);
+  if (result == ESP_OK) {
+    ESP_LOGD(TAG, "[%s] NVS_Write(handle: %p) -> fails: %d, uri: '%s', port: %ld", __func__, 
+          handle, config_ptr->fails, config_ptr->uri, config_ptr->port);
+  } else {
+    ESP_LOGE(TAG, "[%s] NVS_Write() failed - result: %d.", __func__, result);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_InitNvs(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  for (uint32_t idx = 0; idx < MQTT_NVS_MAX; ++idx) {
+    mqtt_nvs_t* nvs_ptr = &(mqtt_nvs_slots[idx]);
+
+    ESP_LOGD(TAG, "[%s] -> idx: %ld", __func__, idx);
+    ESP_LOGD(TAG, "[%s] NVS_Open(name: '%s')", __func__, nvs_ptr->name);
+    result = NVS_Open(nvs_ptr->name, &(nvs_ptr->handle));
+    if (result == ESP_OK) {
+      mqtt_config_t* config_ptr = &(nvs_ptr->config);
+      size_t config_size = sizeof(mqtt_config_t);
+
+      result = mqttctrl_ReadConfig(nvs_ptr->handle, config_ptr, &config_size);
+      if (result != ESP_OK) {
+        result = mqttctrl_WriteConfig(nvs_ptr->handle, config_ptr, config_size);
+      }
+    } else {
+      ESP_LOGE(TAG, "[%s] NVS_Open() failed - result: %d.", __func__, result);
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t mqttctrl_DoneNvs(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  for (uint32_t idx = 0; idx < MQTT_NVS_MAX; ++idx) {
+    mqtt_nvs_t* nvs_ptr = &(mqtt_nvs_slots[idx]);
+
+    ESP_LOGD(TAG, "[%s] -> idx: %ld", __func__, idx);
+    ESP_LOGD(TAG, "[%s] NVS_Close(handle: %p)", __func__, nvs_ptr->handle);
+    result = NVS_Close(nvs_ptr->handle);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] NVS_Close() failed - result: %d.", __func__, result);
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t mqttctrl_Publish(const char* topic, const char* msg) {
   esp_err_t result = ESP_OK;
 
@@ -313,19 +423,19 @@ static esp_err_t mqttctrl_SetAddress(const cJSON* address) {
       port = (uint32_t) cJSON_GetNumberValue(obj);
     }
 
+    mqtt_nvs_t* nvs_ptr = &(mqtt_nvs_slots[MQTT_NVS_MAIN]);
+    mqtt_config_t* config_ptr = &(nvs_ptr->config);
+
     if (uri) {
-      memcpy(&mqtt_address.uri, uri, strlen(uri));
+      memcpy(&config_ptr->uri, uri, strlen(uri));
     }
 
     if ((port > 0) && (port <= 65535)) {
-      mqtt_address.port = port;
+      config_ptr->port = port;
     }
 
     ESP_LOGD(TAG, "[%s] uri: '%s', port: %ld", __func__, uri ? uri : "---", port);
-
-    if (mqtt_nvs_handle) {
-      NVS_Write(mqtt_nvs_handle, "address", &mqtt_address, sizeof(mqttctrl_address_t));
-    }
+    result = mqttctrl_WriteConfig(nvs_ptr->handle, config_ptr, sizeof(mqtt_config_t));
 
   } else {
     ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
@@ -416,6 +526,9 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
       data_mqtt_event_e event_id = msg->payload.mqtt.u.event_id;
 
       ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, event_id, GET_DATA_MQTT_EVENT_NAME(event_id));
+      if (event_id == DATA_MQTT_EVENT_DISCONNECTED) {
+        result = mqttctrl_StopClient();
+      }
       break;
     }
     case MSG_TYPE_MQTT_DATA: {
@@ -507,22 +620,8 @@ static esp_err_t mqttctrl_Init(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
-  memset(&mqtt_address, 0x00, sizeof(mqttctrl_address_t));
+  result = mqttctrl_InitNvs();
 
-  result = NVS_Open("mqtt-ctrl", &mqtt_nvs_handle);
-  if (result == ESP_OK) {
-    size_t data_size = sizeof(mqttctrl_address_t);
-
-    result = NVS_Read(mqtt_nvs_handle, "address", &mqtt_address, &data_size);
-    if (result == ESP_OK) {
-      ESP_LOGD(TAG, "[%s] NVS_Read() -> uri: '%s', port: %ld", __func__, mqtt_address.uri, mqtt_address.port);
-    } else {
-      ESP_LOGE(TAG, "[%s] NVS_Read() - result: %d.", __func__, result);
-    }
-  } else {
-    ESP_LOGE(TAG, "[%s] Cannot open 'mqtt-ctrl' partition - result: %d.", __func__, result);
-  }
-  
   /* Initialization message queue */
   mqtt_msg_queue = xQueueCreate(MQTT_MSG_MAX, sizeof(msg_t));
   if (mqtt_msg_queue == NULL)
@@ -582,9 +681,7 @@ static esp_err_t mqttctrl_Done(void) {
     ESP_LOGD(TAG, "[%s] Queue deleted", __func__);
   }
 
-  if (mqtt_nvs_handle) {
-    NVS_Close(mqtt_nvs_handle);
-  }
+  result = mqttctrl_DoneNvs();
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;

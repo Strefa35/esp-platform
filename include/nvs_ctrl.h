@@ -1,7 +1,7 @@
 /**
- * @file nvm_ctrl.h
+ * @file nvs_ctrl.h
  * @author A.Czerwinski@pistacje.net
- * @brief NVM Controller
+ * @brief NVS Controller
  * @version 0.1
  * @date 2025-04-15
  * 
