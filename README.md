@@ -13,6 +13,15 @@ In order to fully automate this process, it was necessary to build a controller 
 # ESP Platform
 That's why I created my own software platform to easily configure modules depending on the ESP32 board version.
 
+Currently, the following boards are supported:
+- [ESP32-EVB](https://www.olimex.com/Products/IoT/ESP32/ESP32-EVB/open-source-hardware)
+- [ESP32-S3-ETH](https://www.waveshare.com/wiki/ESP32-S3-ETH)
+
+The above boards have their configurations available in sdkconfig.defaults files:
+- sdkconfig.defaults.esp32.debug
+- sdkconfig.defaults.esp32s3.debug
+
+
 The solution consists of several modules:
 - mgr_ctrl
 - eth_ctrl
@@ -196,7 +205,7 @@ Then the controller subscribes to the topic list for each resource.
   {
     "operation": "get",
     "sensor": "name-of-sensor",
-    "data": ["info", threshold", "lux", ...]
+    "data": ["info", "threshold", "lux", ...]
   }
   ```
 #### Response
