@@ -21,7 +21,27 @@ The above boards have their configurations available in sdkconfig.defaults files
 - sdkconfig.defaults.esp32.debug
 - sdkconfig.defaults.esp32s3.debug
 
+## List of supported targets
+`idf.py --list-targets`
 
+## Change target
+
+### Set ESP32 target
+```
+cp sdkconfig.defaults.esp32.debug sdkconfig.defaults
+idf.py set-target esp32
+idf.py menuconfig
+```
+### Set ESP32-S3 target
+```
+cp sdkconfig.defaults.esp32s3.debug sdkconfig.defaults
+idf.py set-target esp32s3
+idf.py menuconfig
+```
+### Build selected target
+`idf.py menuconfig`
+
+## List of modules
 The solution consists of several modules:
 - mgr_ctrl
 - eth_ctrl
@@ -29,7 +49,7 @@ The solution consists of several modules:
 - relay_ctrl
 - sensor_ctrl
 
-The main module is the management module (mgr_ctrl) which allows for managing modules and mediates data transmission between modules.
+The main module is the management module (**mgr_ctrl**) which allows for managing modules and mediates data transmission between modules.
 
 # Quick Reference
 
@@ -50,7 +70,10 @@ The main module is the management module (mgr_ctrl) which allows for managing mo
 
 - From esp-idf folder do below command: `. ./export.sh` to export 
 
-### Build Electric Water Heater Controller
+### Configuration esp-platform
+- `idf.py menuconfig`
+
+### Build esp-platform
 - `idf.py build`
 
 # Communication
@@ -73,9 +96,34 @@ We distinguish the following types of operations:
 - get - get request
 - response - set/get response
 
-### REGISTER/ESP - Information about connected devices
+## REGISTER/ESP
+Information about connected devices
+
 After starting, the controller sends information about its configuration.
 Then the controller subscribes to the topic list for each resource.
+
+#### Request
+- Topic: `REGISTER/ESP`
+- Operation: `get`
+- Get current controller configuration:
+  ```
+  {
+    "operation": "get"
+  }
+  ```
+#### Response
+- Topic: `REGISTER/ESP`, 
+- Operation: `response`
+- Response after get:
+  ```
+  {
+    "operation": "response",
+    "uid": "ESP/12AB34",
+    "mac": "12:34:56:78:90:AB",
+    "ip": "10.0.0.20",
+    "list": ["eth", "mqtt"]
+  }
+  ```
 
 #### Event
 - Topic: `REGISTER/ESP`
@@ -90,16 +138,8 @@ Then the controller subscribes to the topic list for each resource.
     "list": ["eth", "mqtt"]
   }
   ```
-- Topic: `REGISTER/ESP`
-- Operation: `get`
-- Get current controller configuration:
-  ```
-  {
-    "operation": "get"
-  }
-  ```
 
-### MQTT request
+## MQTT
 
 #### Request
 - Topic: `ESP/12AB34/req/mqtt`, 
@@ -116,8 +156,29 @@ Then the controller subscribes to the topic list for each resource.
     }
   }
   ```
+- Get current state for mqtt:
+  ```
+  {
+    "operation": "get",
+  }
+  ```
+#### Response
+- Topic: `ESP/12AB34/res/mqtt`, 
+- Operation: `response`
+- Response after get:
+  ```
+  {
+    "operation": "response",
+    "broker": { 
+      "address": {
+        "uri": "mqtt-broker-uri",
+        "port": value
+      }
+    }
+  }
+  ```
 
-### Relay request/response/event
+## RELAY
 
 #### Request
 - Topic: `ESP/12AB34/req/relay`, 
@@ -171,7 +232,7 @@ Then the controller subscribes to the topic list for each resource.
   }
   ```
 
-### Sensor request/response/event
+## Sensor
 
 #### Request
 - Topic: `ESP/12AB34/req/sensor`, 
