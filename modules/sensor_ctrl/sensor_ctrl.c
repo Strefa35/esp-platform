@@ -81,7 +81,7 @@ static esp_err_t sensorCb(cJSON* data, void* param) {
     int ret = -1;
     if ((ret = cJSON_PrintPreallocated(event, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0)) == 1) {
       /* add topic -> ESP/12AB34/event/sensor */
-      snprintf(msg.payload.mqtt.u.data.topic, DATA_MSG_SIZE, "%s/event/sensor", esp_uid);
+      snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/event/sensor", esp_uid);
 
       result = MGR_Send(&msg);
       if (result != ESP_OK) {
