@@ -78,12 +78,10 @@ static esp_err_t sensorCb(cJSON* data, void* param) {
     cJSON_AddStringToObject(event, "sensor", sensor_list[idx].name);
     cJSON_AddItemToObject(event, "data", data);
 
-
-
     int ret = -1;
-    if ((ret = cJSON_PrintPreallocated(event, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
+    if ((ret = cJSON_PrintPreallocated(event, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0)) == 1) {
       /* add topic -> ESP/12AB34/event/sensor */
-      sprintf(msg.payload.mqtt.u.data.topic, "%s/event/sensor", esp_uid);
+      snprintf(msg.payload.mqtt.u.data.topic, DATA_MSG_SIZE, "%s/event/sensor", esp_uid);
 
       result = MGR_Send(&msg);
       if (result != ESP_OK) {
@@ -129,6 +127,58 @@ static sensor_reg_t* findSensor(const char* name) {
   return sensor_slot_ptr;
 }
 
+static esp_err_t publishResponse(cJSON* response, msg_t* msg) {
+  int ret = -1;
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(response: %p, msg: %p)", __func__, response, msg);
+  if ((ret = cJSON_PrintPreallocated(response, msg->payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0)) == 1) {
+    /* add topic -> ESP/12AB34/res/sensor */
+    snprintf(msg->payload.mqtt.u.data.topic, DATA_MSG_SIZE, "%s/res/sensor", esp_uid);
+
+    result = MGR_Send(msg);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
+    }
+  } else {
+    ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static esp_err_t publishError(const char* error_msg) {
+  cJSON *response;
+  msg_t msg = {
+    .type = MSG_TYPE_MQTT_PUBLISH,
+    .from = REG_SENSOR_CTRL,
+    .to = REG_MQTT_CTRL,
+  };
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(error_msg: '%s')", __func__, error_msg);
+
+  /* create root of json for response */
+  response = cJSON_CreateObject();
+  if (response == NULL)
+  {
+    ESP_LOGW(TAG, "[%s] cJSON_CreateObject() failed", __func__);
+    return ESP_FAIL;
+  }
+
+  cJSON_AddStringToObject(response, "operation", "response");
+  cJSON_AddStringToObject(response, "status", "error");
+  cJSON_AddStringToObject(response, "message", error_msg);
+
+  /* Send json to the thread */
+  result = publishResponse(response, &msg);
+
+  cJSON_Delete(response);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* data) {
   sensor_reg_t* sensor = findSensor(name);
   operation_type_e op = convertOperation(op_str);
@@ -138,12 +188,15 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
     .from = REG_SENSOR_CTRL,
     .to = REG_MQTT_CTRL,
   };
-  bool to_send = true;
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s(name: '%s', operation: '%s')", __func__, name, op_str);
   if (sensor == NULL) {
+    char error_msg[30] = "";
+
     ESP_LOGW(TAG, "[%s] Unknown sensor: '%s'", __func__, name);
+    snprintf(error_msg, 30, "Unknown sensor: '%s'", name);
+    result = publishError(error_msg);
     return ESP_FAIL;
   }
   /* create root of json for response */
@@ -156,7 +209,7 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
 
   cJSON_AddStringToObject(response, "operation", "response");
   cJSON_AddStringToObject(response, "sensor", name);
-  //cJSON* result_obj = cJSON_AddNumberToObject(response, "result", ESP_OK);
+  cJSON* status_obj = cJSON_AddStringToObject(response, "status", "ok");
 
   switch (op) {
     case OP_TYPE_SET: {
@@ -179,29 +232,16 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
     }
     default: {
       ESP_LOGW(TAG, "[%s] Unknown operation: %s -> %d ['%s']", __func__, op_str, op, GET_OP_TYPE_NAME(op));
-      to_send = false;
+      cJSON_SetValuestring(status_obj, "error");
+      cJSON_AddStringToObject(response, "message", "Unknown operation");
       result = ESP_FAIL;
       break;
     }
   }
 
-  //cJSON_SetNumberValue(result_obj, result);
-
   /* Send json to the thread */
-  if (to_send) {
-    int ret = -1;
-    if ((ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
-      /* add topic -> ESP/12AB34/res/sensor */
-      sprintf(msg.payload.mqtt.u.data.topic, "%s/res/sensor", esp_uid);
+  result = publishResponse(response, &msg);
 
-      result = MGR_Send(&msg);
-      if (result != ESP_OK) {
-        ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
-      }
-    } else {
-      ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
-    }
-  }
   cJSON_Delete(response);
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
@@ -250,7 +290,18 @@ static esp_err_t parseMqttData(const char* json_str) {
 
       result = useSensor(s_str, o_str, data);
     } else {
-      ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+      if (!operation) {
+        result = publishError("Bad format. Missing operation field.");
+        ESP_LOGE(TAG, "[%s] Bad format. Missing operation field.", __func__);
+      } else if (!sensor) {
+        result = publishError("Bad format. Missing sensor field.");
+        ESP_LOGE(TAG, "[%s] Bad format. Missing sensor field.", __func__);
+      } else if (!data) {
+        result = publishError("Bad format. Missing data field.");
+        ESP_LOGE(TAG, "[%s] Bad format. Missing data field.", __func__);
+      } else {
+        result = publishError("Bad format");
+      }
       ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
     }
     cJSON_Delete(root);
