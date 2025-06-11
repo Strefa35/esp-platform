@@ -42,9 +42,9 @@
 #define MGR_MAC_LEN             (17U)  // 12:34:56:78:90:AB
 #define MGR_IP_LEN              (15U)  // 123.123.123.123
 
-#define MGR_UID_MAX             (MGR_UID_LEN + 1U)  // ESP/12AB34 + /0          -> 11-bytes
-#define MGR_MAC_MAX             (MGR_MAC_LEN + 1U)  // 12:34:56:78:90:AB + /0   -> 18-bytes
-#define MGR_IP_MAX              (MGR_IP_LEN + 1U)   // 123.123.123.123 + /0     -> 16-bytes
+#define MGR_UID_MAX             (MGR_UID_LEN + 1U)  // ESP/12AB34 + \0          -> 11-bytes
+#define MGR_MAC_MAX             (MGR_MAC_LEN + 1U)  // 12:34:56:78:90:AB + \0   -> 18-bytes
+#define MGR_IP_MAX              (MGR_IP_LEN + 1U)   // 123.123.123.123 + \0     -> 16-bytes
 
 
 static const char* TAG = "ESP::MGR";
@@ -59,19 +59,6 @@ static SemaphoreHandle_t  mgr_sem_id = NULL;
 static data_eth_mac_t     mgr_eth_mac = {};
 static data_eth_info_t    mgr_eth_info = {};
 
-
-/**
- * @brief Buffer to prepare topic
- *
- * The buffer is used to prepare the topic.
- * It consists of the following parts:
- *
- *   UID/topic
- *      where:
- *        - UID - has 10 bytes: 'ESP/12AB34'
- *        - topic - has MQTT_TOPIC_LEN bytes: '/sys'
- */
-//static char     mgr_topic_buffer[MGR_TOPIC_MAX_LEN];
 
 static char mgr_reg_pub_pattern[] = "REGISTER/ESP/%02X%02X%02X";
 static char mgr_reg_sub_pattern[] = "REGISTER/ESP";
@@ -186,7 +173,7 @@ static void mgr_SendUidToAll(void) {
   };
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  memcpy(msg.payload.mgr.uid, mgr_uid, MGR_UID_LEN + 1);
+  memcpy(msg.payload.mgr.uid, mgr_uid, MGR_UID_MAX);
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
     if ((msg.to & mgr_reg_list[idx].type) && mgr_reg_list[idx].send_fn) {
       esp_err_t result = mgr_reg_list[idx].send_fn(&msg);
@@ -455,10 +442,10 @@ static esp_err_t mgr_ParseMqttData(const msg_t* msg) {
     }
 
     /* Gets module name and call send_fn() if module was found */
-    ESP_LOGD(TAG, "[%s] Find a module: '%s'", __func__, &(data_ptr->topic[MGR_UID_LEN + 1]));
+    ESP_LOGD(TAG, "[%s] Find a module: '%s'", __func__, &(data_ptr->topic[MGR_UID_MAX]));
     for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
       ESP_LOGD(TAG, "[%s] Registered module: '%s' on idx: %d", __func__, mgr_reg_list[idx].name, idx);
-      if (strstr(&(data_ptr->topic[MGR_UID_LEN + 1]), mgr_reg_list[idx].name) != NULL) {
+      if (strstr(&(data_ptr->topic[MGR_UID_MAX]), mgr_reg_list[idx].name) != NULL) {
         ESP_LOGD(TAG, "[%s] Module '%s' found.", __func__, mgr_reg_list[idx].name);
         if (mgr_reg_list[idx].send_fn) {
           result = mgr_reg_list[idx].send_fn(msg);
