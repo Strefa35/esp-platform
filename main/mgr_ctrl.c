@@ -37,14 +37,14 @@
 #define GET_ETH_MAC(_mac)       _mac[0], _mac[1], _mac[2], _mac[3], _mac[4], _mac[5]
 
 #define MGR_TOPIC_MAX_LEN       (20U)
-#define MGR_UID_LEN             (10U)
-#define MGR_MAC_LEN             (17U)
-#define MGR_IP_LEN              (15U)
 
-#define MGR_TOPIC_LEN           (MGR_TOPIC_MAX_LEN - MGR_UID_LEN - 1)
+#define MGR_UID_LEN             (10U)  // ESP/12AB34
+#define MGR_MAC_LEN             (17U)  // 12:34:56:78:90:AB
+#define MGR_IP_LEN              (15U)  // 123.123.123.123
 
-#define MGR_UID_IDX             (0U)
-#define MGR_TOPIC_IDX           (10U)
+#define MGR_UID_MAX             (MGR_UID_LEN + 1U)  // ESP/12AB34 + /0          -> 11-bytes
+#define MGR_MAC_MAX             (MGR_MAC_LEN + 1U)  // 12:34:56:78:90:AB + /0   -> 18-bytes
+#define MGR_IP_MAX              (MGR_IP_LEN + 1U)   // 123.123.123.123 + /0     -> 16-bytes
 
 
 static const char* TAG = "ESP::MGR";
@@ -82,9 +82,9 @@ static char mgr_ip_pattern[]      = "%d.%d.%d.%d";
 
 static char mgr_topic_pattern[] = "%s/req/%s";
 
-static char mgr_uid[MGR_UID_LEN + 1]  = {}; /* keeps only UID, as: ESP/12AB34 */
-static char mgr_mac[MGR_MAC_LEN + 1]  = {}; /* keeps only MAC, as: 12:34:56:78:90:AB */
-static char mgr_ip[MGR_IP_LEN + 1]    = {}; /* keeps only IP, as: 123.123.123.123 */
+static char mgr_uid[MGR_UID_MAX]  = {}; /* keeps only UID, as: ESP/12AB34 */
+static char mgr_mac[MGR_MAC_MAX]  = {}; /* keeps only MAC, as: 12:34:56:78:90:AB */
+static char mgr_ip[MGR_IP_MAX]    = {}; /* keeps only IP, as: 123.123.123.123 */
 
 
 /**
@@ -165,10 +165,10 @@ static esp_err_t mgr_Send(const msg_t* msg) {
 static void mgr_CreateUid(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
 
-  snprintf(mgr_uid, MGR_UID_LEN, mgr_uid_pattern, mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
+  snprintf(mgr_uid, MGR_UID_MAX, mgr_uid_pattern, mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
   ESP_LOGD(TAG, "[%s]     mgr_uid: '%s'", __func__, mgr_uid);
 
-  snprintf(mgr_mac, MGR_UID_LEN, mgr_mac_pattern, mgr_eth_mac[0], mgr_eth_mac[1], mgr_eth_mac[2], mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
+  snprintf(mgr_mac, MGR_MAC_MAX, mgr_mac_pattern, mgr_eth_mac[0], mgr_eth_mac[1], mgr_eth_mac[2], mgr_eth_mac[3], mgr_eth_mac[4], mgr_eth_mac[5]);
   ESP_LOGD(TAG, "[%s]     mgr_mac: '%s'", __func__, mgr_mac);
 
   ESP_LOGI(TAG, "--%s()", __func__);
@@ -520,7 +520,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       mgr_eth_info = msg->payload.eth.u.info;
 
       addr = (uint8_t*) &(mgr_eth_info.ip);
-      snprintf(mgr_ip, MGR_IP_LEN, mgr_ip_pattern, addr[0], addr[1], addr[2], addr[3]);
+      snprintf(mgr_ip, MGR_IP_MAX, mgr_ip_pattern, addr[0], addr[1], addr[2], addr[3]);
       ESP_LOGD(TAG, "[%s]   IP: %d.%d.%d.%d", __func__, 
         addr[0], addr[1], addr[2], addr[3]
       );
