@@ -6,6 +6,30 @@ menu "MQTT Controller"
         help
             Enable MQTT Controller to use by the Manager
 
+    config MQTT_CTRL_BROKER_URL
+        string "Broker URL"
+        default "mqtt://homeassistant.local:1883"
+        help
+            URL of the broker to connect to
+
+    config MQTT_CTRL_BROKER_PORT
+        int "Broker PORT"
+        default 1883
+        help
+            PORT of the broker to connect to
+
+    config MQTT_CTRL_CREDENTIAL_USERNAME
+        string "User name"
+        default ""
+        help
+            User name
+
+    config MQTT_CTRL_CREDENTIAL_PASSWORD
+        string "Password"
+        default ""
+        help
+            Password
+
     choice MQTT_CTRL_LOG_LEVEL
         bool "Log level"
         default MQTT_CTRL_LOG_DEFAULT_LEVEL_INFO

@@ -31,30 +31,34 @@
 #include "mqtt_lut.h"
 
 
-#define MQTT_TASK_NAME            "mqtt-task"
-#define MQTT_TASK_STACK_SIZE      4096
-#define MQTT_TASK_PRIORITY        9
+#define MQTT_TASK_NAME                "mqtt-task"
+#define MQTT_TASK_STACK_SIZE          4096
+#define MQTT_TASK_PRIORITY            9
 
-#define MQTT_MSG_MAX              10
+#define MQTT_MSG_MAX                  10
 
-#define MQTT_TOPIC_MAX_LEN        (32U)
-#define MQTT_UID_LEN              (10U)
-#define MQTT_TOPIC_LEN            (MQTT_TOPIC_MAX_LEN - MQTT_UID_LEN - 1)
+#define MQTT_TOPIC_MAX_LEN            (32U)
+#define MQTT_UID_LEN                  (10U)
+#define MQTT_TOPIC_LEN                (MQTT_TOPIC_MAX_LEN - MQTT_UID_LEN - 1)
 
-#define MQTT_UID_IDX              (0U)
-#define MQTT_TOPIC_IDX            (10U)
+#define MQTT_UID_IDX                  (0U)
+#define MQTT_TOPIC_IDX                (10U)
 
 /* Temporary Broker URL - should be taken from NVS */
-#define CONFIG_BROKER_URL           "mqtt://10.0.0.10"
-#define CONFIG_BROKER_PORT          1883
+//#define CONFIG_BROKER_URL           "mqtt://10.0.0.10"
+//#define CONFIG_BROKER_URL           "mqtt://10.0.0.45"
+#define CONFIG_BROKER_URL             CONFIG_MQTT_CTRL_BROKER_URL
+#define CONFIG_BROKER_PORT            CONFIG_MQTT_CTRL_BROKER_PORT
+#define CONFIG_CREDENTIAL_USERNAME    CONFIG_MQTT_CTRL_CREDENTIAL_USERNAME
+#define CONFIG_CREDENTIAL_PASSWORD    CONFIG_MQTT_CTRL_CREDENTIAL_PASSWORD
 
-#define MQTT_NVS_NAME_SIZE          (20U)
-#define MQTT_URI_SIZE               (30U)
+#define MQTT_NVS_NAME_SIZE            (20U)
+#define MQTT_URI_SIZE                 (40U)
 
-#define MQTT_NVS_PARTITION_MAIN     "mqtt-ctrl"
-#define MQTT_NVS_PARTITION_BACKUP   "mqtt-ctrl.backup"
+#define MQTT_NVS_PARTITION_MAIN       "mqtt-ctrl"
+#define MQTT_NVS_PARTITION_BACKUP     "mqtt-ctrl.backup"
 
-#define MQTT_NVS_FAILS_MAX          3
+#define MQTT_NVS_FAILS_MAX            3
 
 
 static esp_mqtt_client_handle_t mqtt_client = NULL;
@@ -94,6 +98,18 @@ static mqtt_nvs_t mqtt_nvs_slots[MQTT_NVS_MAX] = {
   }
 };
 
+esp_mqtt_client_config_t mqtt_cfg = {
+  .broker.address.uri = CONFIG_BROKER_URL,
+  .session.protocol_ver = MQTT_PROTOCOL_V_5,
+  .network.disable_auto_reconnect = true,
+  .credentials.username = CONFIG_CREDENTIAL_USERNAME,
+  .credentials.authentication.password = CONFIG_CREDENTIAL_PASSWORD,
+  // .session.last_will.topic = "/topic/will",
+  // .session.last_will.msg = "i will leave",
+  // .session.last_will.msg_len = 12,
+  // .session.last_will.qos = 1,
+  // .session.last_will.retain = true,
+};
 
 static const char* TAG = "ESP::MQTT";
 
@@ -199,21 +215,11 @@ static void mqttctrl_EventHandler(void *handler_args, esp_event_base_t base, int
 }
 
 static esp_err_t mqttctrl_InitClient(void) {
-  esp_mqtt_client_config_t mqtt_cfg = {
-    .broker.address.uri = CONFIG_BROKER_URL,
-    .session.protocol_ver = MQTT_PROTOCOL_V_5,
-    .network.disable_auto_reconnect = true,
-    // .credentials.username = "123",
-    // .credentials.authentication.password = "456",
-    // .session.last_will.topic = "/topic/will",
-    // .session.last_will.msg = "i will leave",
-    // .session.last_will.msg_len = 12,
-    // .session.last_will.qos = 1,
-    // .session.last_will.retain = true,
-  };
   esp_err_t result = ESP_FAIL;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGD(TAG, "[%s] Broker: %s", __func__, mqtt_cfg.broker.address.uri);
+  ESP_LOGD(TAG, "[%s]   '%s':'%s'", __func__, mqtt_cfg.credentials.username, mqtt_cfg.credentials.authentication.password);
   mqtt_client = esp_mqtt_client_init(&mqtt_cfg);
   if (mqtt_client) {
     result = esp_mqtt_client_register_event(mqtt_client, ESP_EVENT_ANY_ID, mqttctrl_EventHandler, NULL);
@@ -620,7 +626,7 @@ static esp_err_t mqttctrl_Init(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
-  result = mqttctrl_InitNvs();
+  //result = mqttctrl_InitNvs();
 
   /* Initialization message queue */
   mqtt_msg_queue = xQueueCreate(MQTT_MSG_MAX, sizeof(msg_t));
