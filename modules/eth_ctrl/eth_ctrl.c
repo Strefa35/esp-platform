@@ -93,9 +93,10 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
 {
   /* we can get the ethernet driver handle from event data */
   esp_eth_handle_t eth_handle = *(esp_eth_handle_t *) event_data;
-  msg_t msg = { 
+  msg_t msg = {
+    .type = MSG_TYPE_ETH_EVENT,
     .from = REG_ETH_CTRL, 
-    .to = REG_MGR_CTRL,
+    .to = REG_ALL_CTRL,
   };
   bool send = true;
   esp_err_t result;
@@ -112,13 +113,13 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
       msg.type = MSG_TYPE_ETH_EVENT;
       msg.payload.eth.u.event_id = DATA_ETH_EVENT_CONNECTED;
       result = MGR_Send(&msg);
-      ESP_LOGI(TAG, "1st -> MSG_Send() - result: %d", result);
+      ESP_LOGD(TAG, "1st -> MSG_Send() - result: %d", result);
 
       /* 2nd message */
       msg.type = MSG_TYPE_ETH_MAC;
       esp_eth_ioctl(eth_handle, ETH_CMD_G_MAC_ADDR, msg.payload.eth.u.mac);
-      ESP_LOGI(TAG, "Ethernet Link Up");
-      ESP_LOGI(TAG, "Ethernet HW Addr %02X:%02X:%02X:%02X:%02X:%02X",
+      ESP_LOGD(TAG, "Ethernet Link Up");
+      ESP_LOGD(TAG, "Ethernet HW Addr %02X:%02X:%02X:%02X:%02X:%02X",
                 msg.payload.eth.u.mac[0], 
                 msg.payload.eth.u.mac[1], 
                 msg.payload.eth.u.mac[2], 
@@ -128,17 +129,17 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
       break;
     }
     case ETHERNET_EVENT_DISCONNECTED: {
-      ESP_LOGI(TAG, "Ethernet Link Down");
+      ESP_LOGD(TAG, "Ethernet Link Down");
       msg.payload.eth.u.event_id = DATA_ETH_EVENT_DISCONNECTED;
       break;
     }
     case ETHERNET_EVENT_START: {
-      ESP_LOGI(TAG, "Ethernet Started");
+      ESP_LOGD(TAG, "Ethernet Started");
       msg.payload.eth.u.event_id = DATA_ETH_EVENT_START;
       break;
     }
     case ETHERNET_EVENT_STOP: {
-      ESP_LOGI(TAG, "Ethernet Stopped");
+      ESP_LOGD(TAG, "Ethernet Stopped");
       msg.payload.eth.u.event_id = DATA_ETH_EVENT_STOP;
       break;
     }
@@ -149,8 +150,9 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
   }
   if (send) {
     result = MGR_Send(&msg);
-    ESP_LOGI(TAG, "MSG_Send() - result: %d", result);
+    ESP_LOGD(TAG, "MSG_Send() - result: %d", result);
   }
+  ESP_LOGI(TAG, "--%s()", __func__);
 }
 
 /** Event handler for IP_EVENT_ETH_GOT_IP */

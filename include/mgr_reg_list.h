@@ -108,7 +108,7 @@ static mgr_reg_t mgr_reg_list[] = {
 #ifdef CONFIG_SYS_CTRL_ENABLE
   {
     "sys", REG_SYS_CTRL,
-    SysCtrl_Init, SysCtrl_Done, SysCtrl_Run, CfgCtrl_Send
+    SysCtrl_Init, SysCtrl_Done, SysCtrl_Run, SysCtrl_Send
   },
 #endif
 
