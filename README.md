@@ -38,18 +38,6 @@ cp sdkconfig.defaults.esp32s3.debug sdkconfig.defaults
 idf.py set-target esp32s3
 idf.py menuconfig
 ```
-### Build selected target
-`idf.py menuconfig`
-
-## List of modules
-The solution consists of several modules:
-- mgr_ctrl
-- eth_ctrl
-- mqtt_ctrl
-- relay_ctrl
-- sensor_ctrl
-
-The main module is the management module (**mgr_ctrl**) which allows for managing modules and mediates data transmission between modules.
 
 # Quick Reference
 
@@ -62,7 +50,7 @@ The main module is the management module (**mgr_ctrl**) which allows for managin
 ## ESP drivers
   `git clone git@github.com:Strefa35/esp-drivers.git esp/esp-drivers`
 
-## Build
+## Configure ESP environment
 
 ### Install ESP-IDF
 - To build repo you need to install [Espressif IoT Development Framework](https://github.com/espressif/esp-idf)
@@ -83,6 +71,18 @@ The main module is the management module (**mgr_ctrl**) which allows for managin
 - Flash the image and display serial output:
   - `idf.py -p /dev/ttyUSB0 flash monitor` - for USB A
   - `idf.py -p /dev/ttyACM0 flash monitor` - for USB C
+
+# ESP Repo
+
+## List of modules
+The solution consists of several modules:
+- mgr_ctrl
+- eth_ctrl
+- mqtt_ctrl
+- relay_ctrl
+- sensor_ctrl
+
+The main module is the management module (**mgr_ctrl**) which allows for managing modules and mediates data transmission between modules.
 
 # Communication
 
