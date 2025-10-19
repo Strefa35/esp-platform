@@ -76,6 +76,14 @@ The main module is the management module (**mgr_ctrl**) which allows for managin
 ### Build esp-platform
 - `idf.py build`
 
+### Run esp-platform
+- Check which USB port you connected the ESP to:
+  - `ls -la /dev/tty*`
+
+- Flash the image and display serial output:
+  - `idf.py -p /dev/ttyUSB0 flash monitor` - for USB A
+  - `idf.py -p /dev/ttyACM0 flash monitor` - for USB C
+
 # Communication
 
 The MQTT protocol is used for bidirectional communication between the Controller and the outside world. This allows you to send information from the controller through the **MQTT Broker** to any other module that has also connected to the broker, as well as send queries from an external module to the controller. Data is sent in **JSON format**.
