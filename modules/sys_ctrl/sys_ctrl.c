@@ -9,11 +9,14 @@
  * 
  */
 #include <string.h>
+#include <time.h>
 
 #include "esp_log.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_netif_sntp.h"
+#include "esp_sntp.h"
 
 #include "sdkconfig.h"
 
@@ -39,6 +42,136 @@ static QueueHandle_t      sys_msg_queue = NULL;
 static TaskHandle_t       sys_task_id = NULL;
 static SemaphoreHandle_t  sys_sem_id = NULL;
 
+static void sysctrl_TimeSyncNotificationCb(struct timeval *tv)
+{
+  ESP_LOGI(TAG, "[%s] Notification of a time synchronization event", __func__);
+  //sntp_sync_time(tv);
+}
+
+static esp_err_t sysctrl_InitSNTP(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
+  config.sync_cb = sysctrl_TimeSyncNotificationCb;  // only if we need the notification function
+  esp_netif_sntp_init(&config);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static void sysctrl_WaitTime(void) {
+  // wait for time to be set
+  int retry = 0;
+  const int retry_count = 15;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  while (esp_netif_sntp_sync_wait(2000 / portTICK_PERIOD_MS) == ESP_ERR_TIMEOUT && ++retry < retry_count) {
+    ESP_LOGD(TAG, "[%s] Waiting for system time to be set... (%d/%d)", __func__, retry, retry_count);
+  }
+
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
+static esp_err_t sysctrl_setTimeZone(const char* tz_str) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (setenv("TZ", tz_str, 1) == 0) {
+    time_t now;
+    struct tm tm;
+    char buf[64];
+
+    tzset();
+
+    ESP_LOGD(TAG, "tzname[0]=%s tzname[1]=%s",
+             tzname[0] ? tzname[0] : "-", tzname[1] ? tzname[1] : "-");
+
+    now = time(NULL);
+    localtime_r(&now, &tm);
+
+    strftime(buf, sizeof(buf), "%Z %z", &tm);
+    ESP_LOGD(TAG, "Current local zone: %s", buf);
+
+  } else {
+    ESP_LOGE(TAG, "setenv(TZ) failed");
+    result = ESP_FAIL;
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+static void sysctrl_GetTimeZone(void) {
+  const char *env_tz = getenv("TZ");
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (env_tz) {
+    ESP_LOGD(TAG, "TZ env: %s", env_tz);
+  } else {
+    ESP_LOGW(TAG, "TZ env not set");
+  }
+
+  ESP_LOGD(TAG, "tzname[0]=%s tzname[1]=%s",
+            tzname[0] ? tzname[0] : "-", tzname[1] ? tzname[1] : "-");
+
+  time_t now = time(NULL);
+  struct tm tm;
+  localtime_r(&now, &tm);
+  char buf[64];
+  strftime(buf, sizeof(buf), "%Z %z", &tm); // %Z = zone name, %z = offset (+/-HHMM)
+  ESP_LOGD(TAG, "Current local zone: %s", buf);
+
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
+static void sysctrl_GetTime(void) {
+  time_t now;
+  char strftime_buf[64];
+  struct tm timeinfo;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  time(&now);
+  localtime_r(&now, &timeinfo);
+  strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
+  ESP_LOGD(TAG, "[%s] The current date/time in is: %s", __func__, strftime_buf);
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
+static esp_err_t sysctrl_EthNotify(data_eth_event_e event_id) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(event_id: %d [%s])", __func__,
+      event_id, GET_DATA_ETH_EVENT_NAME(event_id));
+
+  switch (event_id) {
+    case DATA_ETH_EVENT_CONNECTED: {
+      ESP_LOGD(TAG, "Ethernet Link Up");
+      sysctrl_InitSNTP();
+      sysctrl_WaitTime();
+      break;
+    }
+    case DATA_ETH_EVENT_DISCONNECTED: {
+      ESP_LOGD(TAG, "Ethernet Link Down");
+      break;
+    }
+    case DATA_ETH_EVENT_START: {
+      ESP_LOGD(TAG, "Ethernet Started");
+      break;
+    }
+    case DATA_ETH_EVENT_STOP: {
+      ESP_LOGD(TAG, "Ethernet Stopped");
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
 
 static esp_err_t sysctrl_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_OK;
@@ -60,6 +193,12 @@ static esp_err_t sysctrl_ParseMsg(const msg_t* msg) {
       result = ESP_TASK_RUN;
       break;
     }
+
+    case MSG_TYPE_ETH_EVENT: {
+      sysctrl_EthNotify(msg->payload.eth.u.event_id);
+      break;
+    }
+
     default: {
       result = ESP_FAIL;
       break;
@@ -83,6 +222,7 @@ static void sysctrl_TaskFn(void* param) {
   memset(&msg, 0x00, sizeof(msg_t));
   while (loop) {
     ESP_LOGD(TAG, "[%s] Wait...", __func__);
+    sysctrl_GetTime();
     if(xQueueReceive(sys_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
       ESP_LOGD(TAG, "[%s] Message arrived: type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
           msg.type, GET_MSG_TYPE_NAME(msg.type),
@@ -124,6 +264,25 @@ static esp_err_t sysctrl_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+
+  sysctrl_GetTimeZone();
+
+  /* Set timezone to Dallas Standard Time
+    This is a TZ string in POSIX format that sets the time zone and DST rules.
+
+    In short:
+    - "CST6CDT" — the standard name CST (Central Standard Time) and the DST name CDT.
+                  The number 6 means an offset of UTC−6 (local time is 6 hours behind UTC).
+    - "M3.2.0/2" — start of daylight saving time: month 3 (March), second week, day 0 (Sunday), at 02:00.
+    - "M11.1.0/2" — end of daylight saving time: month 11 (November), first week, day 0 (Sunday), at 02:00.
+
+    So: we set the time zone to US Central (e.g. Dallas) with DST switching from the second Sunday in March at 02:00
+        to the first Sunday in November at 02:00.
+
+    The function sysctrl_setTimeZone applies this with setenv("TZ", ...) and tzset(), so local time functions
+    (localtime, strftime) will use those rules.
+  */
+  sysctrl_setTimeZone("CST6CDT,M3.2.0/2,M11.1.0/2");
 
   /* Initialization message queue */
   sys_msg_queue = xQueueCreate(SYS_MSG_MAX, sizeof(msg_t));
