@@ -33,9 +33,11 @@ set(PRIV_REQUIRE_LIST
   json
 )
 
-list(APPEND SOURCE_LIST sensor_tsl2561.c)
-list(APPEND INCLUDE_LIST include)
-list(APPEND PRIV_REQUIRE_LIST tsl2561)
+if(SENSOR_TSL2561_ENABLE)
+  list(APPEND SOURCE_LIST         sensor_tsl2561.c)
+  list(APPEND INCLUDE_LIST        include)
+  list(APPEND PRIV_REQUIRE_LIST   tsl2561)
+endif()
 
 #####################################
 #### idf_component_register

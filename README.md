@@ -14,12 +14,20 @@ In order to fully automate this process, it was necessary to build a controller 
 That's why I created my own software platform to easily configure modules depending on the ESP32 board version.
 
 Currently, the following boards are supported:
-- [ESP32-EVB](https://www.olimex.com/Products/IoT/ESP32/ESP32-EVB/open-source-hardware)
-- [ESP32-S3-ETH](https://www.waveshare.com/wiki/ESP32-S3-ETH)
+- ESP32
+  - [ESP32-EVB](https://www.olimex.com/Products/IoT/ESP32/ESP32-EVB/open-source-hardware)
+  - [Hardware reference](https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32/hw-reference/index.html)
+- ESP32-S3
+  - [ESP32-S3-ETH](https://www.waveshare.com/wiki/ESP32-S3-ETH)
+  - [Hardware reference](https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32s3/hw-reference/index.html)
+- ESP32-S2
+  - [ESP32-S2 Mini](https://www.wemos.cc/en/latest/s2/s2_mini.html)
+  - [Hardware reference](https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32s2/hw-reference/index.html)
 
 The above boards have their configurations available in sdkconfig.defaults files:
 - sdkconfig.defaults.esp32.debug
 - sdkconfig.defaults.esp32s3.debug
+- sdkconfig.defaults.esp32s2.debug
 
 ## List of supported targets
 `idf.py --list-targets`
@@ -38,6 +46,12 @@ cp sdkconfig.defaults.esp32s3.debug sdkconfig.defaults
 idf.py set-target esp32s3
 idf.py menuconfig
 ```
+### Set ESP32-S2 Mini target
+```
+cp sdkconfig.defaults.esp32s2.debug sdkconfig.defaults
+idf.py set-target esp32s2
+idf.py menuconfig
+```
 
 # Quick Reference
 
@@ -45,7 +59,7 @@ idf.py menuconfig
   `git clone --recursive git@github.com:Strefa35/esp-platform.git esp/esp-platform`
 
 ## ESP-IDF Extra Components
-  `git clone --recursive git@github.com:espressif/idf-extra-components.git esp/idf-extra-components`
+  `git clone --recursive git@github.com:espressif/idf-extra-components.gitidf.py build esp/idf-extra-components`
 
 ## ESP drivers
   `git clone git@github.com:Strefa35/esp-drivers.git esp/esp-drivers`
