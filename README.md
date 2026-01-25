@@ -59,7 +59,7 @@ idf.py menuconfig
   `git clone --recursive git@github.com:Strefa35/esp-platform.git esp/esp-platform`
 
 ## ESP-IDF Extra Components
-  `git clone --recursive git@github.com:espressif/idf-extra-components.gitidf.py build esp/idf-extra-components`
+  `git clone --recursive git@github.com:espressif/idf-extra-components.git esp/idf-extra-components`
 
 ## ESP drivers
   `git clone git@github.com:Strefa35/esp-drivers.git esp/esp-drivers`
