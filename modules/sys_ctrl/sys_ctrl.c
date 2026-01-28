@@ -12,6 +12,7 @@
 #include <time.h>
 
 #include "esp_log.h"
+#include "esp_mac.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -26,6 +27,7 @@
 
 #include "err.h"
 #include "lut.h"
+#include "sys_lut.h"
 
 
 #define SYS_TASK_NAME           "sys-task"
@@ -42,12 +44,25 @@ static QueueHandle_t      sys_msg_queue = NULL;
 static TaskHandle_t       sys_task_id = NULL;
 static SemaphoreHandle_t  sys_sem_id = NULL;
 
+
+static data_eth_mac_t     sys_esp_mac = {0};
+
+/**
+ * @brief Time synchronization notification callback
+ * 
+ * @param tv Pointer to a timeval structure containing the synchronized time
+ */
 static void sysctrl_TimeSyncNotificationCb(struct timeval *tv)
 {
   ESP_LOGI(TAG, "[%s] Notification of a time synchronization event", __func__);
   //sntp_sync_time(tv);
 }
 
+/**
+ * @brief Initialize SNTP
+ * 
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
 static esp_err_t sysctrl_InitSNTP(void) {
   esp_err_t result = ESP_OK;
 
@@ -61,6 +76,10 @@ static esp_err_t sysctrl_InitSNTP(void) {
   return result;
 }
 
+/**
+ * @brief Wait for time to be set via SNTP
+ * 
+ */
 static void sysctrl_WaitTime(void) {
   // wait for time to be set
   int retry = 0;
@@ -75,6 +94,12 @@ static void sysctrl_WaitTime(void) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
+/**
+ * @brief Set time zone
+ * 
+ * @param tz_str Time zone string (e.g., "PST8PDT")
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
 static esp_err_t sysctrl_setTimeZone(const char* tz_str) {
   esp_err_t result = ESP_OK;
 
@@ -103,6 +128,10 @@ static esp_err_t sysctrl_setTimeZone(const char* tz_str) {
   return result;
 }
 
+/**
+ * @brief Get time zone information
+ * 
+ */
 static void sysctrl_GetTimeZone(void) {
   const char *env_tz = getenv("TZ");
 
@@ -126,6 +155,10 @@ static void sysctrl_GetTimeZone(void) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
+/**
+ * @brief Get current time
+ * 
+ */
 static void sysctrl_GetTime(void) {
   time_t now;
   char strftime_buf[64];
@@ -139,6 +172,40 @@ static void sysctrl_GetTime(void) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
+/**
+ * @brief Get MAC address
+ * 
+ * @param mac Pointer to a buffer where the MAC address will be stored
+ * @param type The type of MAC address to retrieve
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_GetMacAddress(uint8_t *mac_ptr, esp_mac_type_t type) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_ESP_MAC_TYPE_NAME(type));
+  if (mac_ptr == NULL) {
+    ESP_LOGE(TAG, "MAC address buffer is NULL");
+    result = ESP_ERR_INVALID_ARG;
+  } else {
+    result = esp_read_mac(mac_ptr, type);
+    if (result == ESP_OK) {
+      ESP_LOGD(TAG, "MAC Address [%s]: %02X:%02X:%02X:%02X:%02X:%02X",
+               GET_ESP_MAC_TYPE_NAME(type),
+               mac_ptr[0], mac_ptr[1], mac_ptr[2], mac_ptr[3], mac_ptr[4], mac_ptr[5]);
+    } else {
+      ESP_LOGE(TAG, "Failed to read MAC address, error: %d", result);
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief Handle Ethernet events
+ * 
+ * @param event_id The specific event ID within the event base
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
 static esp_err_t sysctrl_EthNotify(data_eth_event_e event_id) {
   esp_err_t result = ESP_OK;
 
@@ -173,6 +240,12 @@ static esp_err_t sysctrl_EthNotify(data_eth_event_e event_id) {
   return result;
 }
 
+/**
+ * @brief Parse incoming messages
+ * 
+ * @param msg Pointer to the message to be parsed
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
 static esp_err_t sysctrl_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
@@ -248,6 +321,12 @@ static void sysctrl_TaskFn(void* param) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
+/**
+ * @brief Send message to System controller
+ * 
+ * @param msg Pointer to the message to be sent
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
 static esp_err_t sysctrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
@@ -260,6 +339,11 @@ static esp_err_t sysctrl_Send(const msg_t* msg) {
   return result;
 }
 
+/**
+ * @brief Init System controller
+ * 
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
 static esp_err_t sysctrl_Init(void) {
   esp_err_t result = ESP_OK;
 
@@ -307,10 +391,21 @@ static esp_err_t sysctrl_Init(void) {
     return ESP_FAIL;
   }
 
+  /* Get ESP_MAC_BASE and keep it in sys_esp_mac */
+  /* The default base MAC is pre-programmed by Espressif in eFuse BLK0. */
+  if (sysctrl_GetMacAddress(sys_esp_mac, ESP_MAC_BASE) != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] sysctrl_GetMacAddress() failed.", __func__);
+  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
+/**
+ * @brief Done System controller
+ * 
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
 static esp_err_t sysctrl_Done(void) {
   esp_err_t result = ESP_OK;
 
@@ -339,6 +434,11 @@ static esp_err_t sysctrl_Done(void) {
   return result;
 }
 
+/**
+ * @brief Run System controller
+ * 
+ * \return esp_err_t ESP_OK on success, or an error code on failure
+ */
 static esp_err_t sysctrl_Run(void) {
   esp_err_t result = ESP_OK;
 
@@ -351,7 +451,7 @@ static esp_err_t sysctrl_Run(void) {
 /**
  * @brief Init System controller
  * 
- * \return esp_err_t 
+ * \return esp_err_t ESP_OK on success, or an error code on failure
  */
 esp_err_t SysCtrl_Init(void) {
   esp_err_t result = ESP_OK;
@@ -367,7 +467,7 @@ esp_err_t SysCtrl_Init(void) {
 /**
  * @brief Done System controller
  * 
- * \return esp_err_t 
+ * \return esp_err_t ESP_OK on success, or an error code on failure
  */
 esp_err_t SysCtrl_Done(void) {
   esp_err_t result = ESP_OK;
@@ -381,7 +481,7 @@ esp_err_t SysCtrl_Done(void) {
 /**
  * @brief Run System controller
  * 
- * \return esp_err_t 
+ * \return esp_err_t ESP_OK on success, or an error code on failure
  */
 esp_err_t SysCtrl_Run(void) {
   esp_err_t result = ESP_OK;
@@ -395,7 +495,7 @@ esp_err_t SysCtrl_Run(void) {
 /**
  * @brief Send message to the System controller thread
  * 
- * \return esp_err_t 
+ * \return esp_err_t ESP_OK on success, or an error code on failure
  */
 esp_err_t SysCtrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
