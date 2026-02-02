@@ -35,6 +35,13 @@ typedef struct nvs_s {
 } nvs_s;
 
 
+/**
+ * @brief Open NVS partition
+ * 
+ * \param partition - partition name
+ * \param handle_ptr - pointer to nvs handle
+ * \return esp_err_t ESP_OK on success, or an error code on failure
+ */
 esp_err_t NVS_Open(const char* partition, nvs_t* const handle_ptr) {
   nvs_t handle = NULL;
   esp_err_t result = ESP_OK;
@@ -73,6 +80,12 @@ esp_err_t NVS_Open(const char* partition, nvs_t* const handle_ptr) {
   return result;
 }
 
+/**
+ * @brief Close NVS partition
+ * 
+ * \param handle - nvs handle
+ * \return esp_err_t ESP_OK on success, or an error code on failure
+ */
 esp_err_t NVS_Close(nvs_t handle) {
   esp_err_t result = ESP_OK;
 
@@ -86,6 +99,15 @@ esp_err_t NVS_Close(nvs_t handle) {
   return result;
 }
 
+/**
+ * @brief Read data from NVS
+ * 
+ * \param handle - nvs handle
+ * \param key - key name
+ * \param data_ptr - pointer to data buffer
+ * \param data_size - pointer to data size
+ * \return esp_err_t ESP_OK on success, or an error code on failure
+ */
 esp_err_t NVS_Read(const nvs_t handle, const char *key, void* data_ptr, size_t* data_size) {
   esp_err_t result = ESP_OK;
 
@@ -97,6 +119,15 @@ esp_err_t NVS_Read(const nvs_t handle, const char *key, void* data_ptr, size_t* 
   return result;
 }
 
+/**
+ * @brief Write data to NVS
+ * 
+ * \param handle - nvs handle
+ * \param key - key name
+ * \param data_ptr - pointer to data buffer
+ * \param data_size - size of data
+ * \return esp_err_t ESP_OK on success, or an error code on failure
+ */
 esp_err_t NVS_Write(const nvs_t handle, const char *key, void* data_ptr, size_t data_size) {
   esp_err_t result = ESP_OK;
 
@@ -112,11 +143,10 @@ esp_err_t NVS_Write(const nvs_t handle, const char *key, void* data_ptr, size_t 
   return result;
 }
 
-
 /**
  * @brief Init NVS
  * 
- * \return esp_err_t 
+ * \return esp_err_t ESP_OK on success, or an error code on failure
  */
 esp_err_t NVS_Init(void) {
   esp_err_t result = ESP_OK;
@@ -142,7 +172,7 @@ esp_err_t NVS_Init(void) {
 /**
  * @brief Done NVS
  * 
- * \return esp_err_t 
+ * \return esp_err_t ESP_OK on success, or an error code on failure
  */
 esp_err_t NVS_Done(void) {
   esp_err_t result = ESP_OK;
