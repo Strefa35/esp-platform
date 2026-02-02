@@ -24,6 +24,7 @@
 #include "err.h"
 #include "msg.h"
 #include "sys_ctrl.h"
+#include "tools.h"
 
 #include "err.h"
 #include "lut.h"
@@ -172,33 +173,7 @@ static void sysctrl_GetTime(void) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
-/**
- * @brief Get MAC address
- * 
- * @param mac Pointer to a buffer where the MAC address will be stored
- * @param type The type of MAC address to retrieve
- * @return esp_err_t ESP_OK on success, or an error code on failure
- */
-static esp_err_t sysctrl_GetMacAddress(uint8_t *mac_ptr, esp_mac_type_t type) {
-  esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(type: %d [%s])", __func__, type, GET_ESP_MAC_TYPE_NAME(type));
-  if (mac_ptr == NULL) {
-    ESP_LOGE(TAG, "MAC address buffer is NULL");
-    result = ESP_ERR_INVALID_ARG;
-  } else {
-    result = esp_read_mac(mac_ptr, type);
-    if (result == ESP_OK) {
-      ESP_LOGD(TAG, "MAC Address [%s]: %02X:%02X:%02X:%02X:%02X:%02X",
-               GET_ESP_MAC_TYPE_NAME(type),
-               mac_ptr[0], mac_ptr[1], mac_ptr[2], mac_ptr[3], mac_ptr[4], mac_ptr[5]);
-    } else {
-      ESP_LOGE(TAG, "Failed to read MAC address, error: %d", result);
-    }
-  }
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-}
 
 /**
  * @brief Handle Ethernet events
@@ -393,8 +368,8 @@ static esp_err_t sysctrl_Init(void) {
 
   /* Get ESP_MAC_BASE and keep it in sys_esp_mac */
   /* The default base MAC is pre-programmed by Espressif in eFuse BLK0. */
-  if (sysctrl_GetMacAddress(sys_esp_mac, ESP_MAC_BASE) != ESP_OK) {
-    ESP_LOGE(TAG, "[%s] sysctrl_GetMacAddress() failed.", __func__);
+  if (tools_GetMacAddress(sys_esp_mac, ESP_MAC_BASE) != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] tools_GetMacAddress() failed.", __func__);
   }
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
