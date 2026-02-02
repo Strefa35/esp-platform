@@ -14,6 +14,7 @@
 
 #include "nvs_ctrl.h"
 #include "mgr_ctrl.h"
+#include "tools.h"
 
 
 static const char* TAG = "ESP::MAIN";
@@ -28,6 +29,11 @@ void app_main(void) {
   esp_log_level_set(TAG, CONFIG_MAIN_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
+
+  result = tools_Init();
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s]() - tools_Init() failed", __func__);
+  }
 
   result = NVS_Init();
   if (result != ESP_OK) {

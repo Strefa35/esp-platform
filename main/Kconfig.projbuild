@@ -2,6 +2,7 @@ menu "ESP32 - Platform"
 
     orsource "Kconfig.main"
     orsource "Kconfig.mgr"
+    orsource "Kconfig.tools"
 
     orsource "../modules/Kconfig.inc"
 

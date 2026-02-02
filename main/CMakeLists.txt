@@ -7,6 +7,7 @@ set(SOURCE_LIST
   main.c 
   nvs_ctrl.c
   mgr_ctrl.c
+  tools.c
 )
 
 #####################################

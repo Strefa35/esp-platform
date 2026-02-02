@@ -21,6 +21,7 @@
 
 #include "mgr_ctrl.h"
 #include "mgr_reg.h"
+#include "tools.h"
 
 #include "mgr_reg_list.h"
 
@@ -492,8 +493,8 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       const data_eth_mac_t* mac_ptr = &(msg->payload.eth.u.mac);
 
       /* Store MAC address */
-      memcpy(mgr_eth_mac, mac_ptr, sizeof(data_eth_mac_t));
-      ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mgr_eth_mac));
+      //memcpy(mgr_eth_mac, mac_ptr, sizeof(data_eth_mac_t)); // Now taken during initialization
+      ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mac_ptr));
 
       mgr_CreateUid();
 
@@ -539,7 +540,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
     }
 
     default: {
-      ESP_LOGW(TAG, "[%s] Unknown message type: %d", __func__, msg->type);
+      ESP_LOGW(TAG, "[%s] Unknown message type: %d [%s]", __func__, msg->type, GET_MSG_TYPE_NAME(msg->type));
       result = ESP_FAIL;
       break;
     }
@@ -639,6 +640,12 @@ esp_err_t MGR_Init(void) {
   if (mgr_sem_id == NULL)
   {
     ESP_LOGE(TAG, "[%s] xSemaphoreCreateCounting() failed.", __func__);
+    return ESP_FAIL;
+  }
+
+  /* Get MAC address */
+  if (tools_GetMacAddress(mgr_eth_mac, ESP_MAC_BASE) != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] tools_GetMacAddress() failed.", __func__);
     return ESP_FAIL;
   }
  
