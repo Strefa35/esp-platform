@@ -81,12 +81,21 @@ static uint8_t eth_ctrl_cnt = 0;
 
 
 /**
- * @brief Event handler for Ethernet events
- *
- * @param arg
- * @param event_base
- * @param event_id
- * @param event_data
+ * @brief Ethernet event handler callback function
+ * 
+ * Handles Ethernet-related events triggered by the ESP event loop. This static
+ * handler processes various Ethernet events such as connection, disconnection,
+ * and other state changes.
+ * 
+ * @param arg Pointer to arbitrary user data passed during handler registration
+ * @param event_base The base identifier of the event (e.g., ETH_EVENT)
+ * @param event_id The specific event ID within the event base
+ * @param event_data Pointer to event-specific data structure
+ * 
+ * @return void
+ * 
+ * @note This function is registered as a callback with the ESP event loop
+ *       and should not be called directly by user code
  */
 static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
                                     int32_t event_id, void *event_data)
@@ -126,6 +135,7 @@ static void ethctrl_EthEventHandler(void *arg, esp_event_base_t event_base,
                 msg.payload.eth.u.mac[3], 
                 msg.payload.eth.u.mac[4], 
                 msg.payload.eth.u.mac[5]);
+
       break;
     }
     case ETHERNET_EVENT_DISCONNECTED: {
