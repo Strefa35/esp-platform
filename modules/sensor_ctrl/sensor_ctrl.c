@@ -28,7 +28,6 @@
 #include "sensor_list.h"
 #include "sensor_lut.h"
 
-#include "err.h"
 #include "lut.h"
 
 
@@ -353,7 +352,7 @@ static esp_err_t parseMsg(const msg_t* msg) {
     }
 
     default: {
-      ESP_LOGW(TAG, "[%s] Unknown message type: %d", __func__, msg->type);
+      ESP_LOGW(TAG, "[%s] Unknown message type: %d [%s]", __func__, msg->type, GET_MSG_TYPE_NAME(msg->type));
       result = ESP_FAIL;
       break;
     }
@@ -530,7 +529,7 @@ esp_err_t SensorCtrl_Run(void) {
 /**
  * @brief Send message to the Sensors controller thread
  * 
- * \return esp_err_t 
+ * \return esp_err_t
  */
 esp_err_t SensorCtrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;

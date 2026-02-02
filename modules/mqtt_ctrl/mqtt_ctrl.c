@@ -561,7 +561,7 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
     }
 
     default: {
-      ESP_LOGW(TAG, "[%s] Unknown message type: %d", __func__, msg->type);
+      ESP_LOGW(TAG, "[%s] Unknown message type: %d [%s]", __func__, msg->type, GET_MSG_TYPE_NAME(msg->type));
       result = ESP_FAIL;
       break;
     }
