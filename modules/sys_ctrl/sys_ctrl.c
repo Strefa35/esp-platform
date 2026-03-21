@@ -39,6 +39,9 @@
 #define SYS_TASK_PRIORITY       12
 
 #define SYS_MSG_MAX             10
+#define SYS_TASK_RX_TIMEOUT_MS  200
+#define SYS_NTP_SYNC_RETRY_MAX  15
+#define SYS_NTP_SYNC_CHECK_MS   2000
 
 
 static const char* TAG = "ESP::SYS";
@@ -58,6 +61,9 @@ static data_uid_t         esp_uid = {0};
 
 static char   sys_ntp_servers[CONFIG_LWIP_SNTP_MAX_SERVERS][SYS_NTP_SERVER_LEN] = {};
 static size_t sys_ntp_servers_count = 0;
+static bool   sys_ntp_wait_pending = false;
+static int    sys_ntp_wait_retry = 0;
+static TickType_t sys_ntp_next_check_tick = 0;
 
 typedef enum {
   SYS_FIELDS_TIMEZONE = (1U << 0),
@@ -139,6 +145,24 @@ static esp_err_t sysctrl_ApplyNtpServers(void) {
 }
 
 /**
+ * @brief Initialize NTP module state
+ *
+ * Prepares internal NTP configuration used by runtime synchronization.
+ *
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_InitNtp(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  sysctrl_InitDefaultNtpServers();
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
  * @brief Initialize SNTP
  * 
  * @return esp_err_t ESP_OK on success, or an error code on failure
@@ -148,7 +172,12 @@ static esp_err_t sysctrl_InitSNTP(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
-  sysctrl_InitDefaultNtpServers();
+  result = sysctrl_InitNtp();
+  if (result != ESP_OK) {
+    ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+    return result;
+  }
+
   result = sysctrl_ApplyNtpServers();
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
@@ -156,21 +185,45 @@ static esp_err_t sysctrl_InitSNTP(void) {
 }
 
 /**
- * @brief Wait for time to be set via SNTP
- * 
+ * @brief Start non-blocking SNTP sync wait state
  */
-static void sysctrl_WaitTime(void) {
-  // wait for time to be set
-  int retry = 0;
-  const int retry_count = 15;
+static void sysctrl_StartWaitTime(void) {
+  sys_ntp_wait_pending = true;
+  sys_ntp_wait_retry = 0;
+  sys_ntp_next_check_tick = xTaskGetTickCount();
 
-  ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGI(TAG, "[%s] Started non-blocking wait for SNTP sync", __func__);
+}
 
-  while (esp_netif_sntp_sync_wait(2000 / portTICK_PERIOD_MS) == ESP_ERR_TIMEOUT && ++retry < retry_count) {
-    ESP_LOGD(TAG, "[%s] Waiting for system time to be set... (%d/%d)", __func__, retry, retry_count);
+/**
+ * @brief Poll SNTP sync state in a non-blocking way
+ */
+static void sysctrl_PollTimeSync(void) {
+  if (!sys_ntp_wait_pending) {
+    return;
   }
 
-  ESP_LOGI(TAG, "--%s()", __func__);
+  TickType_t now_tick = xTaskGetTickCount();
+  if ((int32_t) (now_tick - sys_ntp_next_check_tick) < 0) {
+    return;
+  }
+
+  esp_err_t wait_result = esp_netif_sntp_sync_wait(0);
+  if (wait_result == ESP_OK) {
+    sys_ntp_wait_pending = false;
+    ESP_LOGI(TAG, "[%s] SNTP synchronized", __func__);
+    return;
+  }
+
+  ++sys_ntp_wait_retry;
+  if (sys_ntp_wait_retry >= SYS_NTP_SYNC_RETRY_MAX) {
+    sys_ntp_wait_pending = false;
+    ESP_LOGW(TAG, "[%s] SNTP sync timeout after %d retries", __func__, sys_ntp_wait_retry);
+    return;
+  }
+
+  sys_ntp_next_check_tick = now_tick + pdMS_TO_TICKS(SYS_NTP_SYNC_CHECK_MS);
+  ESP_LOGD(TAG, "[%s] Waiting for SNTP sync... (%d/%d)", __func__, sys_ntp_wait_retry, SYS_NTP_SYNC_RETRY_MAX);
 }
 
 /**
@@ -232,6 +285,30 @@ static void sysctrl_GetTimeZone(void) {
   ESP_LOGD(TAG, "Current local zone: %s", buf);
 
   ESP_LOGI(TAG, "--%s()", __func__);
+}
+
+/**
+ * @brief Initialize timezone configuration in task context
+ */
+static void sysctrl_InitTimeZone(void) {
+  sysctrl_GetTimeZone();
+
+  /* Set timezone from configuration
+    This is a TZ string in POSIX format that sets the time zone and DST rules.
+
+    The function sysctrl_setTimeZone applies this with setenv("TZ", ...) and tzset(), so local time functions
+    (localtime, strftime) will use those rules.
+  */
+#ifdef CONFIG_SYS_CTRL_TIMEZONE_CUSTOM
+  const char* tz_string = CONFIG_SYS_CTRL_TIMEZONE_CUSTOM_STRING;
+  if (!tz_string || tz_string[0] == '\0') {
+    ESP_LOGW(TAG, "[%s] Custom timezone selected but string is empty, using UTC", __func__);
+    tz_string = "UTC0";
+  }
+#else
+  const char* tz_string = CONFIG_SYS_CTRL_TIMEZONE_STRING;
+#endif
+  sysctrl_setTimeZone(tz_string);
 }
 
 /**
@@ -719,12 +796,15 @@ static esp_err_t sysctrl_EthNotify(data_eth_event_e event_id) {
   switch (event_id) {
     case DATA_ETH_EVENT_CONNECTED: {
       ESP_LOGD(TAG, "Ethernet Link Up");
-      sysctrl_InitSNTP();
-      sysctrl_WaitTime();
+      result = sysctrl_InitSNTP();
+      if (result == ESP_OK) {
+        sysctrl_StartWaitTime();
+      }
       break;
     }
     case DATA_ETH_EVENT_DISCONNECTED: {
       ESP_LOGD(TAG, "Ethernet Link Down");
+      sys_ntp_wait_pending = false;
       break;
     }
     case DATA_ETH_EVENT_START: {
@@ -822,10 +902,18 @@ static void sysctrl_TaskFn(void* param) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
   memset(&msg, 0x00, sizeof(msg_t));
+
+  sysctrl_InitTimeZone();
+
+  result = sysctrl_InitNtp();
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] sysctrl_InitNtp() failed: %d", __func__, result);
+  }
+
   while (loop) {
     ESP_LOGD(TAG, "[%s] Wait...", __func__);
     sysctrl_GetTime();
-    if(xQueueReceive(sys_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
+    if(xQueueReceive(sys_msg_queue, &msg, pdMS_TO_TICKS(SYS_TASK_RX_TIMEOUT_MS)) == pdTRUE) {
       ESP_LOGD(TAG, "[%s] Message arrived: type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
           msg.type, GET_MSG_TYPE_NAME(msg.type),
           msg.from, msg.to);
@@ -840,9 +928,9 @@ static void sysctrl_TaskFn(void* param) {
         // TODO - Send Error to the Broker
         ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);
       }
-    } else {
-      ESP_LOGE(TAG, "[%s] Message error.", __func__);
     }
+
+    sysctrl_PollTimeSync();
   }
   if (sys_sem_id) {
     xSemaphoreGive(sys_sem_id);
@@ -877,25 +965,6 @@ static esp_err_t sysctrl_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-
-  sysctrl_GetTimeZone();
-
-  /* Set timezone from configuration
-    This is a TZ string in POSIX format that sets the time zone and DST rules.
-
-    The function sysctrl_setTimeZone applies this with setenv("TZ", ...) and tzset(), so local time functions
-    (localtime, strftime) will use those rules.
-  */
-#ifdef CONFIG_SYS_CTRL_TIMEZONE_CUSTOM
-  const char* tz_string = CONFIG_SYS_CTRL_TIMEZONE_CUSTOM_STRING;
-  if (!tz_string || tz_string[0] == '\0') {
-    ESP_LOGW(TAG, "[%s] Custom timezone selected but string is empty, using UTC", __func__);
-    tz_string = "UTC0";
-  }
-#else
-  const char* tz_string = CONFIG_SYS_CTRL_TIMEZONE_STRING;
-#endif
-  sysctrl_setTimeZone(tz_string);
 
   /* Initialization message queue */
   sys_msg_queue = xQueueCreate(SYS_MSG_MAX, sizeof(msg_t));
