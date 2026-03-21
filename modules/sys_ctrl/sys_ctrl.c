@@ -673,19 +673,24 @@ static esp_err_t sysctrl_ParseMqttData(const char* json_str) {
   cJSON* root = cJSON_Parse(json_str);
   if (root) {
     const cJSON* operation = cJSON_GetObjectItem(root, "operation");
-    if (operation) {
+    if (operation && cJSON_IsString(operation)) {
       const char* o_str = cJSON_GetStringValue(operation);
-      ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
-      if (strcmp(o_str, "get") == 0) {
-        const cJSON* fields = cJSON_GetObjectItem(root, "fields");
-        result = sysctrl_PrepareResponse(fields);
-      } else if (strcmp(o_str, "set") == 0) {
-        result = sysctrl_ParseSet(root);
+      if (o_str != NULL) {
+        ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
+        if (strcmp(o_str, "get") == 0) {
+          const cJSON* fields = cJSON_GetObjectItem(root, "fields");
+          result = sysctrl_PrepareResponse(fields);
+        } else if (strcmp(o_str, "set") == 0) {
+          result = sysctrl_ParseSet(root);
+        } else {
+          ESP_LOGW(TAG, "[%s] Unsupported operation: '%s'", __func__, o_str);
+        }
       } else {
-        ESP_LOGW(TAG, "[%s] Unsupported operation: '%s'", __func__, o_str);
+        ESP_LOGE(TAG, "[%s] Bad data format. Operation field is not a valid string.", __func__);
+        ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
       }
     } else {
-      ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+      ESP_LOGE(TAG, "[%s] Bad data format. Missing or invalid operation field.", __func__);
       ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
     }
     cJSON_Delete(root);
