@@ -688,10 +688,14 @@ static esp_err_t sysctrl_ParseMqttData(const char* json_str) {
       } else {
         ESP_LOGE(TAG, "[%s] Bad data format. Operation field is not a valid string.", __func__);
         ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
-      }
+        }
     } else {
-      ESP_LOGE(TAG, "[%s] Bad data format. Missing or invalid operation field.", __func__);
-      ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+        ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+        char *json_str_unformatted = cJSON_PrintUnformatted(root);
+        if (json_str_unformatted != NULL) {
+          ESP_LOGE(TAG, "[%s] '%s'", __func__, json_str_unformatted);
+          cJSON_free(json_str_unformatted);
+        }
     }
     cJSON_Delete(root);
   }
