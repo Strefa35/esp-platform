@@ -13,7 +13,7 @@ jobs:
     name: Build ${{ matrix.board_name }}
     runs-on: ubuntu-latest
     container:
-      image: espressif/idf:v5.5.1
+      image: espressif/idf@sha256:cbc2e2ec2afee95f1cfa14acfa3bb6cc69a51816537fe0234f4429e71a881066 # v5.5.1
     strategy:
       fail-fast: false
       matrix:
@@ -30,14 +30,17 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           submodules: recursive
 
       - name: Clone external components
         run: |
-          git clone --depth 1 --recursive https://github.com/espressif/idf-extra-components.git ../idf-extra-components
-          git clone --depth 1 --recursive https://github.com/Strefa35/esp-drivers.git ../esp-drivers
+          git clone --filter=blob:none --recursive https://github.com/espressif/idf-extra-components.git ../idf-extra-components
+          git -C ../idf-extra-components checkout 78a16155b4842a120f46a3e57d8c8898f15c2f71 # 2026-03-20
+
+          git clone --filter=blob:none --recursive https://github.com/Strefa35/esp-drivers.git ../esp-drivers
+          git -C ../esp-drivers checkout 214b9818ee29e28b7c67b426638753f5480054b5 # 2026-01-26
 
       - name: Build firmware for ${{ matrix.target }}
         shell: bash
@@ -50,7 +53,7 @@ jobs:
           idf.py build
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: esp-platform-${{ matrix.target }}
           path: |
