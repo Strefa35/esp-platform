@@ -39,7 +39,6 @@
 #define SYS_TASK_PRIORITY       12
 
 #define SYS_MSG_MAX             10
-#define SYS_TASK_RX_TIMEOUT_MS  200
 #define SYS_NTP_SYNC_RETRY_MAX  15
 #define SYS_NTP_SYNC_CHECK_MS   2000
 
@@ -70,6 +69,8 @@ typedef enum {
   SYS_FIELDS_NTP      = (1U << 2),
   SYS_FIELDS_ALL      = (SYS_FIELDS_TIMEZONE | SYS_FIELDS_TIME | SYS_FIELDS_NTP),
 } sys_fields_mask_e;
+
+static void sysctrl_GetTime(void);
 
 
 /**
@@ -211,6 +212,7 @@ static void sysctrl_PollTimeSync(void) {
   if (wait_result == ESP_OK) {
     sys_ntp_wait_pending = false;
     ESP_LOGI(TAG, "[%s] SNTP synchronized", __func__);
+    sysctrl_GetTime();
     return;
   }
 
@@ -319,12 +321,33 @@ static void sysctrl_GetTime(void) {
   char strftime_buf[64];
   struct tm timeinfo;
 
-  ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGD(TAG, "++%s()", __func__);
   time(&now);
   localtime_r(&now, &timeinfo);
   strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
   ESP_LOGD(TAG, "[%s] The current date/time in is: %s", __func__, strftime_buf);
-  ESP_LOGI(TAG, "--%s()", __func__);
+  ESP_LOGD(TAG, "--%s()", __func__);
+}
+
+/**
+ * @brief Compute queue wait time aligned to next SNTP poll check
+ *
+ * Blocks indefinitely when no SNTP wait is pending. When waiting for SNTP sync,
+ * waits only until the next planned poll check tick.
+ *
+ * @return TickType_t Number of ticks to pass into xQueueReceive timeout
+ */
+static TickType_t sysctrl_GetQueueWaitTicks(void) {
+  if (!sys_ntp_wait_pending) {
+    return portMAX_DELAY;
+  }
+
+  TickType_t now_tick = xTaskGetTickCount();
+  if ((int32_t) (now_tick - sys_ntp_next_check_tick) >= 0) {
+    return 0;
+  }
+
+  return sys_ntp_next_check_tick - now_tick;
 }
 
 /**
@@ -678,15 +701,11 @@ static esp_err_t sysctrl_ParseMqttData(const char* json_str) {
         }
       } else {
         ESP_LOGE(TAG, "[%s] Bad data format. Operation field is not a valid string.", __func__);
-        ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
-        }
+        ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
+      }
     } else {
         ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
-        char *json_str_unformatted = cJSON_PrintUnformatted(root);
-        if (json_str_unformatted != NULL) {
-          ESP_LOGE(TAG, "[%s] '%s'", __func__, json_str_unformatted);
-          cJSON_free(json_str_unformatted);
-        }
+        ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
     }
     cJSON_Delete(root);
   }
@@ -825,9 +844,8 @@ static void sysctrl_TaskFn(void* param) {
   }
 
   while (loop) {
-    ESP_LOGD(TAG, "[%s] Wait...", __func__);
-    sysctrl_GetTime();
-    if(xQueueReceive(sys_msg_queue, &msg, pdMS_TO_TICKS(SYS_TASK_RX_TIMEOUT_MS)) == pdTRUE) {
+    TickType_t wait_ticks = sysctrl_GetQueueWaitTicks();
+    if (xQueueReceive(sys_msg_queue, &msg, wait_ticks) == pdTRUE) {
       ESP_LOGD(TAG, "[%s] Message arrived: type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
           msg.type, GET_MSG_TYPE_NAME(msg.type),
           msg.from, msg.to);
