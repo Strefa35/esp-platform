@@ -56,7 +56,6 @@ static data_eth_mac_t     sys_esp_mac = {0};
 static data_uid_t         esp_uid = {0};
 
 #define SYS_NTP_DEFAULT_SERVER    CONFIG_SYS_CTRL_NTP_SERVER_DEFAULT
-#define SYS_TIME_STR_SIZE         (32U)
 #define SYS_NTP_SERVER_LEN        (64U)
 
 static char   sys_ntp_servers[CONFIG_LWIP_SNTP_MAX_SERVERS][SYS_NTP_SERVER_LEN] = {};
@@ -331,31 +330,19 @@ static void sysctrl_GetTime(void) {
 /**
  * @brief Build time information JSON object
  *
- * Adds unix, local and UTC time representations to the provided JSON object.
+ * Adds current Unix epoch UTC time to the provided JSON object.
  *
  * @param time_obj cJSON object to fill with time data
  */
 static void sysctrl_BuildTimeInfo(cJSON* time_obj) {
   time_t now = 0;
-  struct tm local_tm;
-  struct tm utc_tm;
-  char local_str[SYS_TIME_STR_SIZE] = {};
-  char utc_str[SYS_TIME_STR_SIZE] = {};
 
   if (!time_obj) {
     return;
   }
 
   time(&now);
-  localtime_r(&now, &local_tm);
-  gmtime_r(&now, &utc_tm);
-
-  strftime(local_str, sizeof(local_str), "%Y-%m-%d %H:%M:%S", &local_tm);
-  strftime(utc_str, sizeof(utc_str), "%Y-%m-%d %H:%M:%S", &utc_tm);
-
-  cJSON_AddNumberToObject(time_obj, "unix", (double) now);
-  cJSON_AddStringToObject(time_obj, "local", local_str);
-  cJSON_AddStringToObject(time_obj, "utc", utc_str);
+  cJSON_AddNumberToObject(time_obj, "time", (double) now);
 }
 
 /**
@@ -450,8 +437,7 @@ static esp_err_t sysctrl_PrepareResponseMask(sys_fields_mask_e fields_mask) {
   }
 
   if (fields_mask & SYS_FIELDS_TIME) {
-    cJSON* time_obj = cJSON_AddObjectToObject(response, "time");
-    sysctrl_BuildTimeInfo(time_obj);
+    sysctrl_BuildTimeInfo(response);
   }
 
   if (fields_mask & SYS_FIELDS_NTP) {
@@ -512,8 +498,7 @@ static esp_err_t sysctrl_PrepareEventMask(sys_fields_mask_e fields_mask) {
   }
 
   if (fields_mask & SYS_FIELDS_TIME) {
-    cJSON* time_obj = cJSON_AddObjectToObject(event, "time");
-    sysctrl_BuildTimeInfo(time_obj);
+    sysctrl_BuildTimeInfo(event);
   }
 
   if (fields_mask & SYS_FIELDS_NTP) {
@@ -548,56 +533,6 @@ static esp_err_t sysctrl_PrepareEventMask(sys_fields_mask_e fields_mask) {
  */
 static esp_err_t sysctrl_PrepareResponse(const cJSON* fields) {
   return sysctrl_PrepareResponseMask(sysctrl_ParseFields(fields));
-}
-
-/**
- * @brief Parse time string in "YYYY-MM-DD HH:MM:SS" format
- *
- * @param time_str time string
- * @param tm_out output tm structure
- * @return true if parsing succeeded
- */
-static bool sysctrl_ParseTimeString(const char* time_str, struct tm* tm_out) {
-  if (!time_str || !tm_out) {
-    return false;
-  }
-
-  memset(tm_out, 0, sizeof(*tm_out));
-  return (strptime(time_str, "%Y-%m-%d %H:%M:%S", tm_out) != NULL);
-}
-
-/**
- * @brief Convert tm to time_t in UTC using temporary TZ override
- *
- * Since timegm() may not be available in all environments (including ESP-IDF),
- * we use a portable approach: temporarily set TZ to UTC, use mktime(), then restore.
- *
- * @param tm_utc time in UTC
- * @return time_t converted value
- */
-static time_t sysctrl_TimegmFallback(struct tm* tm_utc) {
-  const char* old_tz = getenv("TZ");
-  char old_tz_buf[SYS_TIME_STR_SIZE] = {};
-  bool had_tz = false;
-
-  if (old_tz) {
-    strncpy(old_tz_buf, old_tz, sizeof(old_tz_buf) - 1);
-    old_tz_buf[sizeof(old_tz_buf) - 1] = '\0';
-    had_tz = true;
-  }
-
-  setenv("TZ", "UTC0", 1);
-  tzset();
-  time_t t = mktime(tm_utc);
-
-  if (had_tz) {
-    setenv("TZ", old_tz_buf, 1);
-  } else {
-    unsetenv("TZ");
-  }
-  tzset();
-
-  return t;
 }
 
 /**
@@ -681,36 +616,15 @@ static esp_err_t sysctrl_ParseSet(const cJSON* root) {
   }
 
   const cJSON* time_obj = cJSON_GetObjectItem(root, "time");
-  if (cJSON_IsObject(time_obj)) {
-    const cJSON* unix_obj = cJSON_GetObjectItem(time_obj, "unix");
-    const cJSON* local_obj = cJSON_GetObjectItem(time_obj, "local");
-    const cJSON* utc_obj = cJSON_GetObjectItem(time_obj, "utc");
-
-    if (cJSON_IsNumber(unix_obj)) {
-      result = sysctrl_SetTimeUnix((time_t) unix_obj->valuedouble);
+  if (time_obj != NULL) {
+    if (cJSON_IsNumber(time_obj)) {
+      result = sysctrl_SetTimeUnix((time_t) time_obj->valuedouble);
       if (result == ESP_OK) {
         fields_mask |= SYS_FIELDS_TIME;
       }
-    } else if (cJSON_IsString(local_obj) && local_obj->valuestring) {
-      struct tm tm_local;
-      if (sysctrl_ParseTimeString(local_obj->valuestring, &tm_local)) {
-        result = sysctrl_SetTimeUnix(mktime(&tm_local));
-        if (result == ESP_OK) {
-          fields_mask |= SYS_FIELDS_TIME;
-        }
-      } else {
-        result = ESP_ERR_INVALID_ARG;
-      }
-    } else if (cJSON_IsString(utc_obj) && utc_obj->valuestring) {
-      struct tm tm_utc;
-      if (sysctrl_ParseTimeString(utc_obj->valuestring, &tm_utc)) {
-        result = sysctrl_SetTimeUnix(sysctrl_TimegmFallback(&tm_utc));
-        if (result == ESP_OK) {
-          fields_mask |= SYS_FIELDS_TIME;
-        }
-      } else {
-        result = ESP_ERR_INVALID_ARG;
-      }
+    } else {
+      ESP_LOGW(TAG, "[%s] Invalid 'time' field type. Expected Unix epoch UTC number.", __func__);
+      result = ESP_ERR_INVALID_ARG;
     }
   }
 

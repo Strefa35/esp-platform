@@ -286,11 +286,7 @@ Time synchronization (NTP) and timezone configuration.
 {
   "operation": "set",
   "timezone": "CST6CDT,M3.2.0/2,M11.1.0/2",
-  "time": {
-    "unix": 1738512000,
-    "local": "2026-02-02 14:30:00",
-    "utc": "2026-02-02 20:30:00"
-  },
+  "time": 1738512000,
   "ntp": {
     "servers": [
       "pool.ntp.org",
@@ -318,7 +314,7 @@ Time synchronization (NTP) and timezone configuration.
 
 **Available fields:**
 - `"timezone"` - current timezone
-- `"time"` - current time information
+- `"time"` - current time as Unix epoch UTC (seconds)
 - `"ntp"` - NTP server configuration and sync status
 
 ### Response
@@ -329,11 +325,7 @@ Time synchronization (NTP) and timezone configuration.
   {
     "operation": "response",
     "timezone": "CST6CDT,M3.2.0/2,M11.1.0/2",
-    "time": {
-      "unix": 1738512000,
-      "local": "2026-02-02 14:30:00",
-      "utc": "2026-02-02 20:30:00"
-    },
+    "time": 1738512000,
     "ntp": {
       "servers": [
         "pool.ntp.org",
@@ -348,16 +340,13 @@ Time synchronization (NTP) and timezone configuration.
 ### Event
 - **Topic:** `ESP/12AB34/event/sys`
 - **Operation:** `event`
-- **Event when time is synchronized or timezone changes:**
+- **Event published after a successful `set` request (for updated fields such as `timezone`, `time`, or `ntp`).**
+- **Note:** SNTP synchronization callback/polling currently updates logs and sync status only; it does not publish an MQTT event by itself.
   ```json
   {
     "operation": "event",
     "timezone": "CST6CDT,M3.2.0/2,M11.1.0/2",
-    "time": {
-      "unix": 1738512000,
-      "local": "2026-02-02 14:30:00",
-      "utc": "2026-02-02 20:30:00"
-    },
+    "time": 1738512000,
     "ntp": {
       "servers": [
         "pool.ntp.org",
