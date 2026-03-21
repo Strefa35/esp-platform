@@ -473,7 +473,7 @@ static esp_err_t sysctrl_PrepareResponseMask(sys_fields_mask_e fields_mask) {
     sysctrl_BuildNtpInfo(ntp_obj);
   }
 
-  int ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0);
+  int ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0);
   if (ret == 1) {
     snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/res/sys", esp_uid);
     result = MGR_Send(&msg);
@@ -529,7 +529,7 @@ static esp_err_t sysctrl_PrepareEventMask(sys_fields_mask_e fields_mask) {
     sysctrl_BuildNtpInfo(ntp_obj);
   }
 
-  int ret = cJSON_PrintPreallocated(event, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0);
+  int ret = cJSON_PrintPreallocated(event, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0);
   if (ret == 1) {
     snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/event/sys", esp_uid);
     result = MGR_Send(&msg);
