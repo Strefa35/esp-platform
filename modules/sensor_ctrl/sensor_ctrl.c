@@ -331,7 +331,11 @@ static esp_err_t parseMsg(const msg_t* msg) {
     }
 
     case MSG_TYPE_MGR_UID: {
-      memcpy(esp_uid, msg->payload.mgr.uid, strlen(msg->payload.mgr.uid) + 1);
+      size_t uid_len = strnlen(msg->payload.mgr.uid, sizeof(esp_uid) - 1U);
+
+      memcpy(esp_uid, msg->payload.mgr.uid, uid_len);
+      esp_uid[uid_len] = '\0';
+
       ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, esp_uid);
       break;
     }
