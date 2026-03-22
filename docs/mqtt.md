@@ -320,10 +320,18 @@ Time synchronization (NTP) and timezone configuration.
 ### Response
 - **Topic:** `ESP/12AB34/res/sys`
 - **Operation:** `response`
-- **Response after get:**
+- **Status semantics:**
+  - `"ok"` - all requested fields were processed successfully
+  - `"partial"` - at least one requested field was applied, but at least one failed validation or apply
+  - `"error"` - no requested field was applied successfully
+- **Error object:** present when `status` is `"partial"` or `"error"`
+  - `code` - ESP-IDF error code returned by SYS controller
+  - `message` - short human-readable error summary
+- **Response after get or fully successful set:**
   ```json
   {
     "operation": "response",
+    "status": "ok",
     "timezone": "CST6CDT,M3.2.0/2,M11.1.0/2",
     "time": 1738512000,
     "ntp": {
@@ -337,14 +345,44 @@ Time synchronization (NTP) and timezone configuration.
   }
   ```
 
+- **Response after partially successful set:**
+  ```json
+  {
+    "operation": "response",
+    "status": "partial",
+    "error": {
+      "code": 258,
+      "message": "Invalid 'time' field type"
+    },
+    "timezone": "CST6CDT,M3.2.0/2,M11.1.0/2"
+  }
+  ```
+
+- **Response after failed set:**
+  ```json
+  {
+    "operation": "response",
+    "status": "error",
+    "error": {
+      "code": 258,
+      "message": "Failed to apply NTP settings"
+    }
+  }
+  ```
+
 ### Event
 - **Topic:** `ESP/12AB34/event/sys`
 - **Operation:** `event`
-- **Event published after a successful `set` request (for updated fields such as `timezone`, `time`, or `ntp`).**
+- **Event published after a fully or partially successful `set` request for fields that were actually applied.**
+- **Status semantics:**
+  - `"ok"` - all requested fields were applied successfully
+  - `"partial"` - only a subset of requested fields was applied; `error` describes the first reported failure
+- **No event is published for `status: "error"` because no field was applied.**
 - **Note:** SNTP synchronization callback/polling currently updates logs and sync status only; it does not publish an MQTT event by itself.
   ```json
   {
     "operation": "event",
+    "status": "ok",
     "timezone": "CST6CDT,M3.2.0/2,M11.1.0/2",
     "time": 1738512000,
     "ntp": {
@@ -355,5 +393,18 @@ Time synchronization (NTP) and timezone configuration.
       ],
       "synced": true
     }
+  }
+  ```
+
+- **Event after partially successful set:**
+  ```json
+  {
+    "operation": "event",
+    "status": "partial",
+    "error": {
+      "code": 258,
+      "message": "Invalid 'time' field type"
+    },
+    "timezone": "CST6CDT,M3.2.0/2,M11.1.0/2"
   }
   ```

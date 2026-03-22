@@ -430,14 +430,56 @@ static sys_fields_mask_e sysctrl_ParseFields(const cJSON* fields) {
 }
 
 /**
+ * @brief Add SYS operation status and optional error payload to JSON object
+ *
+ * @param root Target JSON object
+ * @param status Operation status string: ok, partial, or error
+ * @param error_code ESP error code to report when status is not ok
+ * @param error_message Human-readable error description
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_AddStatus(cJSON* root, const char* status, esp_err_t error_code,
+                                   const char* error_message) {
+  if ((root == NULL) || (status == NULL)) {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  if (cJSON_AddStringToObject(root, "status", status) == NULL) {
+    return ESP_FAIL;
+  }
+
+  if ((error_code != ESP_OK) || (error_message != NULL)) {
+    cJSON* error_obj = cJSON_AddObjectToObject(root, "error");
+    if (error_obj == NULL) {
+      return ESP_FAIL;
+    }
+
+    if (cJSON_AddNumberToObject(error_obj, "code", (double) error_code) == NULL) {
+      return ESP_FAIL;
+    }
+
+    if ((error_message != NULL) &&
+        (cJSON_AddStringToObject(error_obj, "message", error_message) == NULL)) {
+      return ESP_FAIL;
+    }
+  }
+
+  return ESP_OK;
+}
+
+/**
  * @brief Prepare and send MQTT response for SYS request
  *
  * Builds JSON response based on requested fields mask and publishes it to MQTT.
  *
  * @param fields_mask Bitmask of requested fields
+ * @param status Operation status string: ok, partial, or error
+ * @param error_code ESP error code to report when status is not ok
+ * @param error_message Human-readable error description
  * @return esp_err_t ESP_OK on success, or an error code on failure
  */
-static esp_err_t sysctrl_PrepareResponseMask(sys_fields_mask_e fields_mask) {
+static esp_err_t sysctrl_PrepareResponseMask(sys_fields_mask_e fields_mask, const char* status,
+                                            esp_err_t error_code, const char* error_message) {
   msg_t msg = {
     .type = MSG_TYPE_MQTT_PUBLISH,
     .from = REG_SYS_CTRL,
@@ -453,6 +495,10 @@ static esp_err_t sysctrl_PrepareResponseMask(sys_fields_mask_e fields_mask) {
   }
 
   cJSON_AddStringToObject(response, "operation", "response");
+  if (sysctrl_AddStatus(response, status, error_code, error_message) != ESP_OK) {
+    cJSON_Delete(response);
+    return ESP_FAIL;
+  }
 
   if (fields_mask & SYS_FIELDS_TIMEZONE) {
     const char* tz = getenv("TZ");
@@ -496,9 +542,13 @@ static esp_err_t sysctrl_PrepareResponseMask(sys_fields_mask_e fields_mask) {
  * Builds JSON event based on requested fields mask and publishes it to MQTT.
  *
  * @param fields_mask Bitmask of requested fields
+ * @param status Operation status string: ok, partial, or error
+ * @param error_code ESP error code to report when status is not ok
+ * @param error_message Human-readable error description
  * @return esp_err_t ESP_OK on success, or an error code on failure
  */
-static esp_err_t sysctrl_PrepareEventMask(sys_fields_mask_e fields_mask) {
+static esp_err_t sysctrl_PrepareEventMask(sys_fields_mask_e fields_mask, const char* status,
+                                         esp_err_t error_code, const char* error_message) {
   msg_t msg = {
     .type = MSG_TYPE_MQTT_PUBLISH,
     .from = REG_SYS_CTRL,
@@ -514,6 +564,10 @@ static esp_err_t sysctrl_PrepareEventMask(sys_fields_mask_e fields_mask) {
   }
 
   cJSON_AddStringToObject(event, "operation", "event");
+  if (sysctrl_AddStatus(event, status, error_code, error_message) != ESP_OK) {
+    cJSON_Delete(event);
+    return ESP_FAIL;
+  }
 
   if (fields_mask & SYS_FIELDS_TIMEZONE) {
     const char* tz = getenv("TZ");
@@ -555,7 +609,7 @@ static esp_err_t sysctrl_PrepareEventMask(sys_fields_mask_e fields_mask) {
  * @return esp_err_t ESP_OK on success, or an error code on failure
  */
 static esp_err_t sysctrl_PrepareResponse(const cJSON* fields) {
-  return sysctrl_PrepareResponseMask(sysctrl_ParseFields(fields));
+  return sysctrl_PrepareResponseMask(sysctrl_ParseFields(fields), "ok", ESP_OK, NULL);
 }
 
 /**
@@ -629,25 +683,36 @@ static esp_err_t sysctrl_SetNtpServers(const cJSON* servers) {
 static esp_err_t sysctrl_ParseSet(const cJSON* root) {
   esp_err_t result = ESP_OK;
   sys_fields_mask_e fields_mask = 0;
+  const char* status = "ok";
+  const char* error_message = NULL;
 
   const cJSON* tz_obj = cJSON_GetObjectItem(root, "timezone");
   if (cJSON_IsString(tz_obj) && tz_obj->valuestring) {
-    result = sysctrl_setTimeZone(tz_obj->valuestring);
-    if (result == ESP_OK) {
+    esp_err_t field_result = sysctrl_setTimeZone(tz_obj->valuestring);
+    if (field_result == ESP_OK) {
       fields_mask |= SYS_FIELDS_TIMEZONE;
+    } else if (result == ESP_OK) {
+      result = field_result;
+      error_message = "Failed to apply timezone";
     }
   }
 
   const cJSON* time_obj = cJSON_GetObjectItem(root, "time");
   if (time_obj != NULL) {
     if (cJSON_IsNumber(time_obj)) {
-      result = sysctrl_SetTimeUnix((time_t) time_obj->valuedouble);
-      if (result == ESP_OK) {
+      esp_err_t field_result = sysctrl_SetTimeUnix((time_t) time_obj->valuedouble);
+      if (field_result == ESP_OK) {
         fields_mask |= SYS_FIELDS_TIME;
+      } else if (result == ESP_OK) {
+        result = field_result;
+        error_message = "Failed to apply time";
       }
     } else {
       ESP_LOGW(TAG, "[%s] Invalid 'time' field type. Expected Unix epoch UTC number.", __func__);
-      result = ESP_ERR_INVALID_ARG;
+      if (result == ESP_OK) {
+        result = ESP_ERR_INVALID_ARG;
+        error_message = "Invalid 'time' field type";
+      }
     }
   }
 
@@ -655,17 +720,44 @@ static esp_err_t sysctrl_ParseSet(const cJSON* root) {
   if (cJSON_IsObject(ntp_obj)) {
     const cJSON* servers = cJSON_GetObjectItem(ntp_obj, "servers");
     if (servers) {
-      result = sysctrl_SetNtpServers(servers);
-      if (result == ESP_OK) {
+      esp_err_t field_result = sysctrl_SetNtpServers(servers);
+      if (field_result == ESP_OK) {
         fields_mask |= SYS_FIELDS_NTP;
+      } else if (result == ESP_OK) {
+        result = field_result;
+        error_message = "Failed to apply NTP settings";
       }
     }
   }
 
+  if (result != ESP_OK) {
+    status = (fields_mask != 0) ? "partial" : "error";
+
+    esp_err_t response_result = sysctrl_PrepareResponseMask(fields_mask, status, result, error_message);
+    if (response_result != ESP_OK) {
+      return response_result;
+    }
+
+    if (fields_mask != 0) {
+      esp_err_t event_result = sysctrl_PrepareEventMask(fields_mask, status, result, error_message);
+      if (event_result != ESP_OK) {
+        return event_result;
+      }
+
+      ESP_LOGW(TAG, "[%s] SYS set request partially applied. fields_mask=0x%02x, error=%d",
+               __func__, (unsigned int) fields_mask, result);
+    }
+
+    return result;
+  }
+
   if (fields_mask != 0) {
-    result = sysctrl_PrepareResponseMask(fields_mask);
+    result = sysctrl_PrepareResponseMask(fields_mask, status, ESP_OK, NULL);
     if (result == ESP_OK) {
-      sysctrl_PrepareEventMask(fields_mask);
+      esp_err_t event_result = sysctrl_PrepareEventMask(fields_mask, status, ESP_OK, NULL);
+      if (event_result != ESP_OK) {
+        result = event_result;
+      }
     }
   }
 
@@ -687,7 +779,13 @@ static esp_err_t sysctrl_ParseMqttData(const char* json_str) {
   cJSON* root = cJSON_Parse(json_str);
   if (root) {
     const cJSON* operation = cJSON_GetObjectItem(root, "operation");
-    if (operation && cJSON_IsString(operation)) {
+    if (operation == NULL) {
+      ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+      ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
+    } else if (!cJSON_IsString(operation)) {
+      ESP_LOGE(TAG, "[%s] Bad data format. Operation field must be a string.", __func__);
+      ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
+    } else {
       const char* o_str = cJSON_GetStringValue(operation);
       if (o_str != NULL) {
         ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
@@ -703,9 +801,6 @@ static esp_err_t sysctrl_ParseMqttData(const char* json_str) {
         ESP_LOGE(TAG, "[%s] Bad data format. Operation field is not a valid string.", __func__);
         ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
       }
-    } else {
-        ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
-        ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
     }
     cJSON_Delete(root);
   }
