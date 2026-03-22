@@ -36,9 +36,13 @@ jobs:
 
       - name: Clone external components
         run: |
-          git clone --depth 1 --recursive https://github.com/espressif/idf-extra-components.git ../idf-extra-components
-          git clone --depth 1 --recursive https://github.com/Strefa35/esp-drivers.git ../esp-drivers
+          # Clone and pin idf-extra-components to a known revision
+          git clone --recursive https://github.com/espressif/idf-extra-components.git ../idf-extra-components
+          git -C ../idf-extra-components checkout 0123456789abcdef0123456789abcdef01234567
 
+          # Clone and pin esp-drivers to a known revision
+          git clone --recursive https://github.com/Strefa35/esp-drivers.git ../esp-drivers
+          git -C ../esp-drivers checkout 89abcdef0123456789abcdef0123456789abcdef
       - name: Build firmware for ${{ matrix.target }}
         shell: bash
         run: |
