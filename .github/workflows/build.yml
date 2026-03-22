@@ -13,7 +13,7 @@ jobs:
     name: Build ${{ matrix.board_name }}
     runs-on: ubuntu-latest
     container:
-      image: espressif/idf:v5.5.1
+      image: espressif/idf@sha256:REPLACE_WITH_DIGEST_FOR_V5_5_1
     strategy:
       fail-fast: false
       matrix:
