@@ -10,6 +10,7 @@
  */
 #include <string.h>
 #include <time.h>
+#include <stdlib.h>
 
 #include "esp_log.h"
 #include "esp_mac.h"
@@ -23,10 +24,12 @@
 
 #include "err.h"
 #include "msg.h"
+#include "mgr_ctrl.h"
 #include "sys_ctrl.h"
 #include "tools.h"
 
-#include "err.h"
+#include "cJSON.h"
+
 #include "lut.h"
 #include "sys_lut.h"
 
@@ -36,6 +39,8 @@
 #define SYS_TASK_PRIORITY       12
 
 #define SYS_MSG_MAX             10
+#define SYS_NTP_SYNC_RETRY_MAX  15
+#define SYS_NTP_SYNC_CHECK_MS   2000
 
 
 static const char* TAG = "ESP::SYS";
@@ -47,16 +52,114 @@ static SemaphoreHandle_t  sys_sem_id = NULL;
 
 
 static data_eth_mac_t     sys_esp_mac = {0};
+static data_uid_t         esp_uid = {0};
+
+#define SYS_NTP_DEFAULT_SERVER    CONFIG_SYS_CTRL_NTP_SERVER_DEFAULT
+#define SYS_NTP_SERVER_LEN        (64U)
+
+static char   sys_ntp_servers[CONFIG_LWIP_SNTP_MAX_SERVERS][SYS_NTP_SERVER_LEN] = {};
+static size_t sys_ntp_servers_count = 0;
+static bool   sys_ntp_wait_pending = false;
+static int    sys_ntp_wait_retry = 0;
+static TickType_t sys_ntp_next_check_tick = 0;
+
+typedef enum {
+  SYS_FIELDS_TIMEZONE = (1U << 0),
+  SYS_FIELDS_TIME     = (1U << 1),
+  SYS_FIELDS_NTP      = (1U << 2),
+  SYS_FIELDS_ALL      = (SYS_FIELDS_TIMEZONE | SYS_FIELDS_TIME | SYS_FIELDS_NTP),
+} sys_fields_mask_e;
+
+static void sysctrl_GetTime(void);
+
 
 /**
  * @brief Time synchronization notification callback
  * 
+ * Called when SNTP successfully synchronizes the time.
+ *
  * @param tv Pointer to a timeval structure containing the synchronized time
  */
 static void sysctrl_TimeSyncNotificationCb(struct timeval *tv)
 {
   ESP_LOGI(TAG, "[%s] Notification of a time synchronization event", __func__);
-  //sntp_sync_time(tv);
+}
+
+/**
+ * @brief Initialize default NTP server list
+ *
+ * Sets up the default NTP server (from CONFIG_SYS_CTRL_NTP_SERVER_DEFAULT)
+ * if no servers have been configured yet.
+ */
+static void sysctrl_InitDefaultNtpServers(void) {
+  if (sys_ntp_servers_count == 0) {
+    strncpy(sys_ntp_servers[0], SYS_NTP_DEFAULT_SERVER, SYS_NTP_SERVER_LEN - 1);
+    sys_ntp_servers[0][SYS_NTP_SERVER_LEN - 1] = '\0';
+    sys_ntp_servers_count = 1;
+    
+    ESP_LOGI(TAG, "[%s] Initialized default NTP server: %s",
+             __func__, sys_ntp_servers[0]);
+  }
+}
+
+/**
+ * @brief Apply current NTP server list to SNTP configuration
+ *
+ * Deinitializes current SNTP, then reinitializes with new server list.
+ * Resets active server index to 0 since we're starting fresh with new config.
+ *
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_ApplyNtpServers(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  esp_netif_sntp_deinit();
+
+  esp_sntp_config_t config = {
+    .smooth_sync = false,
+    .server_from_dhcp = false,
+    .wait_for_sync = true,
+    .start = true,
+    .sync_cb = sysctrl_TimeSyncNotificationCb,
+    .renew_servers_after_new_IP = false,
+    .ip_event_to_renew = IP_EVENT_STA_GOT_IP,
+    .index_of_first_server = 0,
+    .num_of_servers = sys_ntp_servers_count,
+  };
+
+  for (size_t i = 0; i < sys_ntp_servers_count; ++i) {
+    config.servers[i] = sys_ntp_servers[i];
+  }
+
+  if (sys_ntp_servers_count > 0) {
+    ESP_LOGI(TAG, "[%s] Applying NTP configuration with %zu servers",
+             __func__, sys_ntp_servers_count);
+  }
+
+  result = esp_netif_sntp_init(&config);
+  
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief Initialize NTP module state
+ *
+ * Prepares internal NTP configuration used by runtime synchronization.
+ *
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_InitNtp(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  sysctrl_InitDefaultNtpServers();
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
 }
 
 /**
@@ -69,30 +172,59 @@ static esp_err_t sysctrl_InitSNTP(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
-  esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
-  config.sync_cb = sysctrl_TimeSyncNotificationCb;  // only if we need the notification function
-  esp_netif_sntp_init(&config);
+  result = sysctrl_InitNtp();
+  if (result != ESP_OK) {
+    ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+    return result;
+  }
+
+  result = sysctrl_ApplyNtpServers();
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
 /**
- * @brief Wait for time to be set via SNTP
- * 
+ * @brief Start non-blocking SNTP sync wait state
  */
-static void sysctrl_WaitTime(void) {
-  // wait for time to be set
-  int retry = 0;
-  const int retry_count = 15;
+static void sysctrl_StartWaitTime(void) {
+  sys_ntp_wait_pending = true;
+  sys_ntp_wait_retry = 0;
+  sys_ntp_next_check_tick = xTaskGetTickCount();
 
-  ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGI(TAG, "[%s] Started non-blocking wait for SNTP sync", __func__);
+}
 
-  while (esp_netif_sntp_sync_wait(2000 / portTICK_PERIOD_MS) == ESP_ERR_TIMEOUT && ++retry < retry_count) {
-    ESP_LOGD(TAG, "[%s] Waiting for system time to be set... (%d/%d)", __func__, retry, retry_count);
+/**
+ * @brief Poll SNTP sync state in a non-blocking way
+ */
+static void sysctrl_PollTimeSync(void) {
+  if (!sys_ntp_wait_pending) {
+    return;
   }
 
-  ESP_LOGI(TAG, "--%s()", __func__);
+  TickType_t now_tick = xTaskGetTickCount();
+  if ((int32_t) (now_tick - sys_ntp_next_check_tick) < 0) {
+    return;
+  }
+
+  esp_err_t wait_result = esp_netif_sntp_sync_wait(0);
+  if (wait_result == ESP_OK) {
+    sys_ntp_wait_pending = false;
+    ESP_LOGI(TAG, "[%s] SNTP synchronized", __func__);
+    sysctrl_GetTime();
+    return;
+  }
+
+  ++sys_ntp_wait_retry;
+  if (sys_ntp_wait_retry >= SYS_NTP_SYNC_RETRY_MAX) {
+    sys_ntp_wait_pending = false;
+    ESP_LOGW(TAG, "[%s] SNTP sync timeout after %d retries", __func__, sys_ntp_wait_retry);
+    return;
+  }
+
+  sys_ntp_next_check_tick = now_tick + pdMS_TO_TICKS(SYS_NTP_SYNC_CHECK_MS);
+  ESP_LOGD(TAG, "[%s] Waiting for SNTP sync... (%d/%d)", __func__, sys_ntp_wait_retry, SYS_NTP_SYNC_RETRY_MAX);
 }
 
 /**
@@ -157,6 +289,30 @@ static void sysctrl_GetTimeZone(void) {
 }
 
 /**
+ * @brief Initialize timezone configuration in task context
+ */
+static void sysctrl_InitTimeZone(void) {
+  sysctrl_GetTimeZone();
+
+  /* Set timezone from configuration
+    This is a TZ string in POSIX format that sets the time zone and DST rules.
+
+    The function sysctrl_setTimeZone applies this with setenv("TZ", ...) and tzset(), so local time functions
+    (localtime, strftime) will use those rules.
+  */
+#ifdef CONFIG_SYS_CTRL_TIMEZONE_CUSTOM
+  const char* tz_string = CONFIG_SYS_CTRL_TIMEZONE_CUSTOM_STRING;
+  if (!tz_string || tz_string[0] == '\0') {
+    ESP_LOGW(TAG, "[%s] Custom timezone selected but string is empty, using UTC", __func__);
+    tz_string = "UTC0";
+  }
+#else
+  const char* tz_string = CONFIG_SYS_CTRL_TIMEZONE_STRING;
+#endif
+  sysctrl_setTimeZone(tz_string);
+}
+
+/**
  * @brief Get current time
  * 
  */
@@ -165,15 +321,493 @@ static void sysctrl_GetTime(void) {
   char strftime_buf[64];
   struct tm timeinfo;
 
-  ESP_LOGI(TAG, "++%s()", __func__);
+  ESP_LOGD(TAG, "++%s()", __func__);
   time(&now);
   localtime_r(&now, &timeinfo);
   strftime(strftime_buf, sizeof(strftime_buf), "%c", &timeinfo);
   ESP_LOGD(TAG, "[%s] The current date/time in is: %s", __func__, strftime_buf);
-  ESP_LOGI(TAG, "--%s()", __func__);
+  ESP_LOGD(TAG, "--%s()", __func__);
 }
 
+/**
+ * @brief Compute queue wait time aligned to next SNTP poll check
+ *
+ * Blocks indefinitely when no SNTP wait is pending. When waiting for SNTP sync,
+ * waits only until the next planned poll check tick.
+ *
+ * @return TickType_t Number of ticks to pass into xQueueReceive timeout
+ */
+static TickType_t sysctrl_GetQueueWaitTicks(void) {
+  if (!sys_ntp_wait_pending) {
+    return portMAX_DELAY;
+  }
 
+  TickType_t now_tick = xTaskGetTickCount();
+  if ((int32_t) (now_tick - sys_ntp_next_check_tick) >= 0) {
+    return 0;
+  }
+
+  return sys_ntp_next_check_tick - now_tick;
+}
+
+/**
+ * @brief Build time information JSON object
+ *
+ * Adds current Unix epoch UTC time to the provided JSON object.
+ *
+ * @param time_obj cJSON object to fill with time data
+ */
+static void sysctrl_BuildTimeInfo(cJSON* time_obj) {
+  time_t now = 0;
+
+  if (!time_obj) {
+    return;
+  }
+
+  time(&now);
+  cJSON_AddNumberToObject(time_obj, "time", (double) now);
+}
+
+/**
+ * @brief Build NTP information JSON object
+ *
+ * Adds list of configured NTP servers and sync status.
+ *
+ * @param ntp_obj cJSON object to fill with NTP data
+ */
+static void sysctrl_BuildNtpInfo(cJSON* ntp_obj) {
+  if (!ntp_obj) {
+    return;
+  }
+
+  cJSON* servers = cJSON_AddArrayToObject(ntp_obj, "servers");
+  if (servers == NULL) {
+    return;
+  }
+
+  if (sys_ntp_servers_count == 0) {
+    sysctrl_InitDefaultNtpServers();
+  }
+
+  for (size_t idx = 0; idx < sys_ntp_servers_count; ++idx) {
+    cJSON_AddItemToArray(servers, cJSON_CreateString(sys_ntp_servers[idx]));
+  }
+
+  sntp_sync_status_t status = sntp_get_sync_status();
+  bool synced = (status == SNTP_SYNC_STATUS_COMPLETED) || (status == SNTP_SYNC_STATUS_IN_PROGRESS);
+  cJSON_AddBoolToObject(ntp_obj, "synced", synced);
+}
+
+/**
+ * @brief Parse requested fields list into a bitmask
+ *
+ * If fields is missing or not an array, returns SYS_FIELDS_ALL.
+ *
+ * @param fields cJSON array with field names
+ * @return Bitmask of requested fields
+ */
+static sys_fields_mask_e sysctrl_ParseFields(const cJSON* fields) {
+  if (!cJSON_IsArray(fields)) {
+    return SYS_FIELDS_ALL;
+  }
+
+  sys_fields_mask_e mask = 0;
+  const cJSON* field = NULL;
+  cJSON_ArrayForEach(field, fields) {
+    if (!cJSON_IsString(field) || (field->valuestring == NULL)) {
+      continue;
+    }
+    if (strcmp(field->valuestring, "timezone") == 0) {
+      mask |= SYS_FIELDS_TIMEZONE;
+    } else if (strcmp(field->valuestring, "time") == 0) {
+      mask |= SYS_FIELDS_TIME;
+    } else if (strcmp(field->valuestring, "ntp") == 0) {
+      mask |= SYS_FIELDS_NTP;
+    }
+  }
+
+  return (mask == 0) ? SYS_FIELDS_ALL : mask;
+}
+
+/**
+ * @brief Add SYS operation status and optional error payload to JSON object
+ *
+ * @param root Target JSON object
+ * @param status Operation status string: ok, partial, or error
+ * @param error_code ESP error code to report when status is not ok
+ * @param error_message Human-readable error description
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_AddStatus(cJSON* root, const char* status, esp_err_t error_code,
+                                   const char* error_message) {
+  if ((root == NULL) || (status == NULL)) {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  if (cJSON_AddStringToObject(root, "status", status) == NULL) {
+    return ESP_FAIL;
+  }
+
+  if ((error_code != ESP_OK) || (error_message != NULL)) {
+    cJSON* error_obj = cJSON_AddObjectToObject(root, "error");
+    if (error_obj == NULL) {
+      return ESP_FAIL;
+    }
+
+    if (cJSON_AddNumberToObject(error_obj, "code", (double) error_code) == NULL) {
+      return ESP_FAIL;
+    }
+
+    if ((error_message != NULL) &&
+        (cJSON_AddStringToObject(error_obj, "message", error_message) == NULL)) {
+      return ESP_FAIL;
+    }
+  }
+
+  return ESP_OK;
+}
+
+/**
+ * @brief Prepare and send MQTT response for SYS request
+ *
+ * Builds JSON response based on requested fields mask and publishes it to MQTT.
+ *
+ * @param fields_mask Bitmask of requested fields
+ * @param status Operation status string: ok, partial, or error
+ * @param error_code ESP error code to report when status is not ok
+ * @param error_message Human-readable error description
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_PrepareResponseMask(sys_fields_mask_e fields_mask, const char* status,
+                                            esp_err_t error_code, const char* error_message) {
+  msg_t msg = {
+    .type = MSG_TYPE_MQTT_PUBLISH,
+    .from = REG_SYS_CTRL,
+    .to = REG_MQTT_CTRL,
+  };
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  cJSON* response = cJSON_CreateObject();
+  if (response == NULL) {
+    return ESP_FAIL;
+  }
+
+  cJSON_AddStringToObject(response, "operation", "response");
+  if (sysctrl_AddStatus(response, status, error_code, error_message) != ESP_OK) {
+    cJSON_Delete(response);
+    return ESP_FAIL;
+  }
+
+  if (fields_mask & SYS_FIELDS_TIMEZONE) {
+    const char* tz = getenv("TZ");
+    cJSON_AddStringToObject(response, "timezone", tz ? tz : "");
+  }
+
+  if (fields_mask & SYS_FIELDS_TIME) {
+    sysctrl_BuildTimeInfo(response);
+  }
+
+  if (fields_mask & SYS_FIELDS_NTP) {
+    cJSON* ntp_obj = cJSON_AddObjectToObject(response, "ntp");
+    if (ntp_obj == NULL) {
+      ESP_LOGE(TAG, "[%s] cJSON_AddObjectToObject(response, \"ntp\") failed", __func__);
+      cJSON_Delete(response);
+      return ESP_FAIL;
+    }
+    sysctrl_BuildNtpInfo(ntp_obj);
+  }
+
+  int ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0);
+  if (ret == 1) {
+    snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/res/sys", esp_uid);
+    result = MGR_Send(&msg);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
+    }
+  } else {
+    ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
+  }
+
+  cJSON_Delete(response);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief Prepare and send MQTT event for SYS set request
+ *
+ * Builds JSON event based on requested fields mask and publishes it to MQTT.
+ *
+ * @param fields_mask Bitmask of requested fields
+ * @param status Operation status string: ok, partial, or error
+ * @param error_code ESP error code to report when status is not ok
+ * @param error_message Human-readable error description
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_PrepareEventMask(sys_fields_mask_e fields_mask, const char* status,
+                                         esp_err_t error_code, const char* error_message) {
+  msg_t msg = {
+    .type = MSG_TYPE_MQTT_PUBLISH,
+    .from = REG_SYS_CTRL,
+    .to = REG_MQTT_CTRL,
+  };
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  cJSON* event = cJSON_CreateObject();
+  if (event == NULL) {
+    return ESP_FAIL;
+  }
+
+  cJSON_AddStringToObject(event, "operation", "event");
+  if (sysctrl_AddStatus(event, status, error_code, error_message) != ESP_OK) {
+    cJSON_Delete(event);
+    return ESP_FAIL;
+  }
+
+  if (fields_mask & SYS_FIELDS_TIMEZONE) {
+    const char* tz = getenv("TZ");
+    cJSON_AddStringToObject(event, "timezone", tz ? tz : "");
+  }
+
+  if (fields_mask & SYS_FIELDS_TIME) {
+    sysctrl_BuildTimeInfo(event);
+  }
+
+  if (fields_mask & SYS_FIELDS_NTP) {
+    cJSON* ntp_obj = cJSON_AddObjectToObject(event, "ntp");
+    sysctrl_BuildNtpInfo(ntp_obj);
+  }
+
+  int ret = cJSON_PrintPreallocated(event, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0);
+  if (ret == 1) {
+    snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/event/sys", esp_uid);
+    result = MGR_Send(&msg);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
+    }
+  } else {
+    ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
+  }
+
+  cJSON_Delete(event);
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief Prepare and send MQTT response for SYS get request
+ *
+ * Builds JSON response based on requested fields and publishes it to MQTT.
+ *
+ * @param fields cJSON array with requested fields
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_PrepareResponse(const cJSON* fields) {
+  return sysctrl_PrepareResponseMask(sysctrl_ParseFields(fields), "ok", ESP_OK, NULL);
+}
+
+/**
+ * @brief Set system time using unix timestamp
+ *
+ * @param unix_time unix timestamp
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_SetTimeUnix(time_t unix_time) {
+  struct timeval tv = {
+    .tv_sec = unix_time,
+    .tv_usec = 0,
+  };
+
+  if (settimeofday(&tv, NULL) != 0) {
+    return ESP_FAIL;
+  }
+
+  sntp_set_sync_status(SNTP_SYNC_STATUS_COMPLETED);
+  return ESP_OK;
+}
+
+/**
+ * @brief Apply NTP server list from JSON array
+ *
+ * Parses server list from JSON, stores it in sys_ntp_servers[], and applies
+ * the configuration. The active server index is reset to 0.
+ *
+ * @param servers JSON array with server strings
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_SetNtpServers(const cJSON* servers) {
+  if (!cJSON_IsArray(servers)) {
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  size_t count = 0;
+  const cJSON* item = NULL;
+  cJSON_ArrayForEach(item, servers) {
+    if (!cJSON_IsString(item) || (item->valuestring == NULL)) {
+      continue;
+    }
+    if (count >= CONFIG_LWIP_SNTP_MAX_SERVERS) {
+      break;
+    }
+
+    strncpy(sys_ntp_servers[count], item->valuestring, SYS_NTP_SERVER_LEN - 1);
+    sys_ntp_servers[count][SYS_NTP_SERVER_LEN - 1] = '\0';
+    ++count;
+  }
+
+  if (count == 0) {
+    ESP_LOGE(TAG, "[%s] No valid NTP servers provided", __func__);
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  sys_ntp_servers_count = count;
+  
+  ESP_LOGI(TAG, "[%s] Configured %zu NTP servers", 
+           __func__, sys_ntp_servers_count);
+
+  return sysctrl_ApplyNtpServers();
+}
+
+/**
+ * @brief Parse and apply SYS set request
+ *
+ * @param root JSON root object
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_ParseSet(const cJSON* root) {
+  esp_err_t result = ESP_OK;
+  sys_fields_mask_e fields_mask = 0;
+  const char* status = "ok";
+  const char* error_message = NULL;
+
+  const cJSON* tz_obj = cJSON_GetObjectItem(root, "timezone");
+  if (cJSON_IsString(tz_obj) && tz_obj->valuestring) {
+    esp_err_t field_result = sysctrl_setTimeZone(tz_obj->valuestring);
+    if (field_result == ESP_OK) {
+      fields_mask |= SYS_FIELDS_TIMEZONE;
+    } else if (result == ESP_OK) {
+      result = field_result;
+      error_message = "Failed to apply timezone";
+    }
+  }
+
+  const cJSON* time_obj = cJSON_GetObjectItem(root, "time");
+  if (time_obj != NULL) {
+    if (cJSON_IsNumber(time_obj)) {
+      esp_err_t field_result = sysctrl_SetTimeUnix((time_t) time_obj->valuedouble);
+      if (field_result == ESP_OK) {
+        fields_mask |= SYS_FIELDS_TIME;
+      } else if (result == ESP_OK) {
+        result = field_result;
+        error_message = "Failed to apply time";
+      }
+    } else {
+      ESP_LOGW(TAG, "[%s] Invalid 'time' field type. Expected Unix epoch UTC number.", __func__);
+      if (result == ESP_OK) {
+        result = ESP_ERR_INVALID_ARG;
+        error_message = "Invalid 'time' field type";
+      }
+    }
+  }
+
+  const cJSON* ntp_obj = cJSON_GetObjectItem(root, "ntp");
+  if (cJSON_IsObject(ntp_obj)) {
+    const cJSON* servers = cJSON_GetObjectItem(ntp_obj, "servers");
+    if (servers) {
+      esp_err_t field_result = sysctrl_SetNtpServers(servers);
+      if (field_result == ESP_OK) {
+        fields_mask |= SYS_FIELDS_NTP;
+      } else if (result == ESP_OK) {
+        result = field_result;
+        error_message = "Failed to apply NTP settings";
+      }
+    }
+  }
+
+  if (result != ESP_OK) {
+    status = (fields_mask != 0) ? "partial" : "error";
+
+    esp_err_t response_result = sysctrl_PrepareResponseMask(fields_mask, status, result, error_message);
+    if (response_result != ESP_OK) {
+      return response_result;
+    }
+
+    if (fields_mask != 0) {
+      esp_err_t event_result = sysctrl_PrepareEventMask(fields_mask, status, result, error_message);
+      if (event_result != ESP_OK) {
+        return event_result;
+      }
+
+      ESP_LOGW(TAG, "[%s] SYS set request partially applied. fields_mask=0x%02x, error=%d",
+               __func__, (unsigned int) fields_mask, result);
+    }
+
+    return result;
+  }
+
+  if (fields_mask != 0) {
+    result = sysctrl_PrepareResponseMask(fields_mask, status, ESP_OK, NULL);
+    if (result == ESP_OK) {
+      esp_err_t event_result = sysctrl_PrepareEventMask(fields_mask, status, ESP_OK, NULL);
+      if (event_result != ESP_OK) {
+        result = event_result;
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * @brief Parse MQTT JSON payload for SYS module
+ *
+ * Currently supports operation "get" and "set".
+ *
+ * @param json_str JSON payload string
+ * @return esp_err_t ESP_OK on success, or an error code on failure
+ */
+static esp_err_t sysctrl_ParseMqttData(const char* json_str) {
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(json_str: '%s')", __func__, json_str);
+  cJSON* root = cJSON_Parse(json_str);
+  if (root) {
+    const cJSON* operation = cJSON_GetObjectItem(root, "operation");
+    if (operation == NULL) {
+      ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
+      ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
+    } else if (!cJSON_IsString(operation)) {
+      ESP_LOGE(TAG, "[%s] Bad data format. Operation field must be a string.", __func__);
+      ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
+    } else {
+      const char* o_str = cJSON_GetStringValue(operation);
+      if (o_str != NULL) {
+        ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
+        if (strcmp(o_str, "get") == 0) {
+          const cJSON* fields = cJSON_GetObjectItem(root, "fields");
+          result = sysctrl_PrepareResponse(fields);
+        } else if (strcmp(o_str, "set") == 0) {
+          result = sysctrl_ParseSet(root);
+        } else {
+          ESP_LOGW(TAG, "[%s] Unsupported operation: '%s'", __func__, o_str);
+        }
+      } else {
+        ESP_LOGE(TAG, "[%s] Bad data format. Operation field is not a valid string.", __func__);
+        ESP_LOGE(TAG, "[%s] Raw payload: '%s'", __func__, json_str ? json_str : "(null)");
+      }
+    }
+    cJSON_Delete(root);
+  }
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
 
 /**
  * @brief Handle Ethernet events
@@ -190,12 +824,15 @@ static esp_err_t sysctrl_EthNotify(data_eth_event_e event_id) {
   switch (event_id) {
     case DATA_ETH_EVENT_CONNECTED: {
       ESP_LOGD(TAG, "Ethernet Link Up");
-      sysctrl_InitSNTP();
-      sysctrl_WaitTime();
+      result = sysctrl_InitSNTP();
+      if (result == ESP_OK) {
+        sysctrl_StartWaitTime();
+      }
       break;
     }
     case DATA_ETH_EVENT_DISCONNECTED: {
       ESP_LOGD(TAG, "Ethernet Link Down");
+      sys_ntp_wait_pending = false;
       break;
     }
     case DATA_ETH_EVENT_START: {
@@ -242,8 +879,33 @@ static esp_err_t sysctrl_ParseMsg(const msg_t* msg) {
       break;
     }
 
+    case MSG_TYPE_MGR_UID: {
+      size_t uid_len = strnlen(msg->payload.mgr.uid, sizeof(esp_uid) - 1U);
+
+      memcpy(esp_uid, msg->payload.mgr.uid, uid_len);
+      esp_uid[uid_len] = '\0';
+
+      ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, esp_uid);
+      break;
+    }
+
     case MSG_TYPE_ETH_EVENT: {
       sysctrl_EthNotify(msg->payload.eth.u.event_id);
+      break;
+    }
+
+    case MSG_TYPE_MQTT_EVENT: {
+      data_mqtt_event_e event_id = msg->payload.mqtt.u.event_id;
+      ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, event_id, GET_DATA_MQTT_EVENT_NAME(event_id));
+      break;
+    }
+
+    case MSG_TYPE_MQTT_DATA: {
+      const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
+
+      ESP_LOGD(TAG, "[%s] topic: '%s'", __func__, data_ptr->topic);
+      ESP_LOGD(TAG, "[%s]   msg: '%s'", __func__, data_ptr->msg);
+      result = sysctrl_ParseMqttData(data_ptr->msg);
       break;
     }
 
@@ -268,10 +930,17 @@ static void sysctrl_TaskFn(void* param) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
   memset(&msg, 0x00, sizeof(msg_t));
+
+  sysctrl_InitTimeZone();
+
+  result = sysctrl_InitNtp();
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] sysctrl_InitNtp() failed: %d", __func__, result);
+  }
+
   while (loop) {
-    ESP_LOGD(TAG, "[%s] Wait...", __func__);
-    sysctrl_GetTime();
-    if(xQueueReceive(sys_msg_queue, &msg, portMAX_DELAY) == pdTRUE) {
+    TickType_t wait_ticks = sysctrl_GetQueueWaitTicks();
+    if (xQueueReceive(sys_msg_queue, &msg, wait_ticks) == pdTRUE) {
       ESP_LOGD(TAG, "[%s] Message arrived: type: %d [%s], from: 0x%08lx, to: 0x%08lx", __func__, 
           msg.type, GET_MSG_TYPE_NAME(msg.type),
           msg.from, msg.to);
@@ -286,9 +955,9 @@ static void sysctrl_TaskFn(void* param) {
         // TODO - Send Error to the Broker
         ESP_LOGE(TAG, "[%s] Error: %d", __func__, result);
       }
-    } else {
-      ESP_LOGE(TAG, "[%s] Message error.", __func__);
     }
+
+    sysctrl_PollTimeSync();
   }
   if (sys_sem_id) {
     xSemaphoreGive(sys_sem_id);
@@ -323,25 +992,6 @@ static esp_err_t sysctrl_Init(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-
-  sysctrl_GetTimeZone();
-
-  /* Set timezone to Dallas Standard Time
-    This is a TZ string in POSIX format that sets the time zone and DST rules.
-
-    In short:
-    - "CST6CDT" — the standard name CST (Central Standard Time) and the DST name CDT.
-                  The number 6 means an offset of UTC−6 (local time is 6 hours behind UTC).
-    - "M3.2.0/2" — start of daylight saving time: month 3 (March), second week, day 0 (Sunday), at 02:00.
-    - "M11.1.0/2" — end of daylight saving time: month 11 (November), first week, day 0 (Sunday), at 02:00.
-
-    So: we set the time zone to US Central (e.g. Dallas) with DST switching from the second Sunday in March at 02:00
-        to the first Sunday in November at 02:00.
-
-    The function sysctrl_setTimeZone applies this with setenv("TZ", ...) and tzset(), so local time functions
-    (localtime, strftime) will use those rules.
-  */
-  sysctrl_setTimeZone("CST6CDT,M3.2.0/2,M11.1.0/2");
 
   /* Initialization message queue */
   sys_msg_queue = xQueueCreate(SYS_MSG_MAX, sizeof(msg_t));

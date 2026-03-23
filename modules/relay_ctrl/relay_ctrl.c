@@ -235,7 +235,7 @@ static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
     }
     if (result == ESP_OK) {
       /* Send json to the thread */
-      if ((ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_JSON_SIZE, 0)) == 1) {
+      if ((ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0)) == 1) {
         /* add topic -> ESP/12AB34/res/relay */
         snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/res/relay", esp_uid);
 
@@ -330,7 +330,11 @@ static esp_err_t relayctrl_ParseMsg(const msg_t* msg) {
     }
 
     case MSG_TYPE_MGR_UID: {
-      memcpy(esp_uid, msg->payload.mgr.uid, strlen(msg->payload.mgr.uid) + 1);
+      size_t uid_len = strnlen(msg->payload.mgr.uid, sizeof(esp_uid) - 1U);
+
+      memcpy(esp_uid, msg->payload.mgr.uid, uid_len);
+      esp_uid[uid_len] = '\0';
+
       ESP_LOGD(TAG, "[%s] UID: '%s'", __func__, esp_uid);
       break;
     }
