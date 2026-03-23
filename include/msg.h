@@ -138,7 +138,7 @@ typedef enum {
 
 #define DATA_UID_SIZE       (11U)
 #define DATA_TOPIC_SIZE     (25U)
-#define DATA_MSG_SIZE       (250U)
+#define DATA_MSG_SIZE       (350U)
 #define DATA_JSON_SIZE      (350U)
 
 
