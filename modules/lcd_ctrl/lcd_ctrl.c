@@ -28,6 +28,11 @@
 #include "lut.h"
 
 
+#if !CONFIG_IDF_TARGET_ESP32
+#error "lcd_ctrl supports only ESP32 target (IDF_TARGET=esp32)."
+#endif
+
+
 #define LCD_TASK_NAME             "lcd-task"
 #define LCD_TASK_STACK_SIZE       4096
 #define LCD_TASK_PRIORITY         10
@@ -42,6 +47,12 @@ static TaskHandle_t       lcd_task_id = NULL;
 static SemaphoreHandle_t  lcd_sem_id = NULL;
 
 
+/**
+ * @brief Parses incoming LCD controller message and dispatches action.
+ *
+ * @param msg Pointer to received message.
+ * @return esp_err_t ESP_OK or task control code, ESP_FAIL for unknown message.
+ */
 static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
@@ -60,6 +71,18 @@ static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
     }
     case MSG_TYPE_RUN: {
       result = ESP_TASK_RUN;
+      break;
+    }
+    case MSG_TYPE_MGR_UID: {
+      lcd_UpdateUid(msg->payload.mgr.uid);
+      break;
+    }
+    case MSG_TYPE_ETH_MAC: {
+      lcd_UpdateMac(msg->payload.eth.u.mac);
+      break;
+    }
+    case MSG_TYPE_ETH_IP: {
+      lcd_UpdateIp(msg->payload.eth.u.info.ip);
       break;
     }
     default: {
@@ -110,6 +133,12 @@ static void lcdctrl_TaskFn(void* param) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
+/**
+ * @brief Sends message to LCD controller internal queue.
+ *
+ * @param msg Pointer to message to enqueue.
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
 static esp_err_t lcdctrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
@@ -122,6 +151,11 @@ static esp_err_t lcdctrl_Send(const msg_t* msg) {
   return result;
 }
 
+/**
+ * @brief Initializes LCD helper resources and controller task.
+ *
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
 static esp_err_t lcdctrl_Init(void) {
   esp_err_t result = ESP_OK;
 
@@ -160,6 +194,11 @@ static esp_err_t lcdctrl_Init(void) {
   return result;
 }
 
+/**
+ * @brief Stops controller task and releases LCD helper resources.
+ *
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
 static esp_err_t lcdctrl_Done(void) {
   esp_err_t result = ESP_OK;
 
@@ -184,10 +223,21 @@ static esp_err_t lcdctrl_Done(void) {
     vQueueDelete(lcd_msg_queue);
     ESP_LOGD(TAG, "[%s] Queue deleted", __func__);
   }
+
+  result = lcd_DoneHelper();
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] lcd_DoneHelper() result: %d.", __func__, result);
+  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
+/**
+ * @brief Executes LCD controller runtime logic.
+ *
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
 static esp_err_t lcdctrl_Run(void) {
   esp_err_t result = ESP_OK;
 
@@ -198,9 +248,9 @@ static esp_err_t lcdctrl_Run(void) {
 }
 
 /**
- * @brief Init LCD controller
- * 
- * \return esp_err_t 
+ * @brief Initializes LCD controller public interface.
+ *
+ * @return esp_err_t ESP_OK on success, error code otherwise.
  */
 esp_err_t LcdCtrl_Init(void) {
   esp_err_t result = ESP_OK;
@@ -214,9 +264,9 @@ esp_err_t LcdCtrl_Init(void) {
 }
 
 /**
- * @brief Done LCD controller
- * 
- * \return esp_err_t 
+ * @brief Deinitializes LCD controller public interface.
+ *
+ * @return esp_err_t ESP_OK on success, error code otherwise.
  */
 esp_err_t LcdCtrl_Done(void) {
   esp_err_t result = ESP_OK;
@@ -228,9 +278,9 @@ esp_err_t LcdCtrl_Done(void) {
 }
 
 /**
- * @brief Run LCD controller
- * 
- * \return esp_err_t 
+ * @brief Runs LCD controller public interface.
+ *
+ * @return esp_err_t ESP_OK on success, error code otherwise.
  */
 esp_err_t LcdCtrl_Run(void) {
   esp_err_t result = ESP_OK;
@@ -242,9 +292,10 @@ esp_err_t LcdCtrl_Run(void) {
 }
 
 /**
- * @brief Send message to the LCD controller thread
- * 
- * \return esp_err_t 
+ * @brief Sends message to LCD controller thread.
+ *
+ * @param msg Pointer to message to send.
+ * @return esp_err_t ESP_OK on success, error code otherwise.
  */
 esp_err_t LcdCtrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;

@@ -8,85 +8,58 @@
  * @copyright Copyright (c) 2025 4Embedded.Systems
  * 
  */
-#include <stdio.h>
 #include <stdbool.h>
- 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include <stdio.h>
 
 #include "sdkconfig.h"
 
-#include "esp_log.h"
+#include "esp_check.h"
 #include "esp_err.h"
-
-#include "lcd_hw.h"
+#include "esp_log.h"
 
 #include "ili9341v.h"
+#include "lcd_hw.h"
 #include "ns2009.h"
-
-
-#define LCD_HW_TASK_NAME              "lcd-hw-task"
-#define LCD_HW_TASK_STACK_SIZE        2048
-#define LCD_HW_TASK_PRIORITY          10
 
 
 static const char* TAG = "ESP::LCD::HW";
 
 
-static TaskHandle_t       lcd_hw_task_id = NULL;
-
-static const TickType_t xDelay = 500 / portTICK_PERIOD_MS;
-
-static void lcdhw_TaskFn(void* param) {
-  bool loop = true;
-  esp_err_t result;
-
-  ESP_LOGI(TAG, "++%s()", __func__);
-  while (loop) {
-    ns2009_touch_t touch = {0, 0, 0};
-
-    ESP_LOGD(TAG, "[%s] Wait...", __func__);
-    result = ns2009_GetTouch(&touch);
-    if (result == ESP_OK) {
-      ESP_LOGD(TAG, "[%s] Touch", __func__);
-    } else {
-      ESP_LOGD(TAG, "[%s] ns2009_GetTouch() - result: %d", __func__, result);
-    }
-    vTaskDelay( xDelay );
-  }
-  ESP_LOGI(TAG, "--%s()", __func__);
-}
-
+/**
+ * @brief Initializes LCD display and touch hardware layers.
+ *
+ * @param lcd_ptr LCD context structure to initialize.
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
 esp_err_t lcd_InitHw(lcd_t* lcd_ptr) {
-  esp_err_t result = ESP_OK;
-
   esp_log_level_set(TAG, CONFIG_LCD_HW_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
-  result = lcd_InitDisplayHw(lcd_ptr);
-  if (result != ESP_OK) {
-    ESP_LOGE(TAG, "[%s] lcd_InitDisplayHw() - result: %d", __func__, result);
-    return result;
-  }
+  ESP_RETURN_ON_ERROR(lcd_InitDisplayHw(lcd_ptr), TAG, "lcd_InitDisplayHw failed");
 
-  ns2009_res_t res = {320, 240};
+  ns2009_res_t res = {
+    .h = (uint32_t) lcd_ptr->h_res,
+    .v = (uint32_t) lcd_ptr->v_res,
+  };
+  ESP_RETURN_ON_ERROR(ns2009_Init(&res), TAG, "ns2009_Init failed");
 
-  result = ns2009_Init(&res);
-  if (result != ESP_OK) {
-    ESP_LOGE(TAG, "[%s] ns2009_Init() - result: %d", __func__, result);
-    return result;
-  }
+  ESP_LOGI(TAG, "--%s()", __func__);
+  return ESP_OK;
+}
 
-  /* Initialization thread */
-  xTaskCreate(lcdhw_TaskFn, LCD_HW_TASK_NAME, LCD_HW_TASK_STACK_SIZE, NULL, LCD_HW_TASK_PRIORITY, &lcd_hw_task_id);
-  if (lcd_hw_task_id == NULL)
-  {
-    ESP_LOGE(TAG, "[%s] xTaskCreate() failed.", __func__);
-    return ESP_FAIL;
-  }
+/**
+ * @brief Deinitializes LCD touch and display hardware layers.
+ *
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
+esp_err_t lcd_DoneHw(void) {
+  ESP_LOGI(TAG, "++%s()", __func__);
 
+  esp_err_t result_touch = ns2009_Done();
+  esp_err_t result_lcd = lcd_DoneDisplayHw();
 
+  esp_err_t result = (result_touch != ESP_OK) ? result_touch : result_lcd;
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

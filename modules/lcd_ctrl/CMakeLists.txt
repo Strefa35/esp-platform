@@ -22,6 +22,11 @@ set(INCLUDE_LIST
 #### REQUIRE_LIST
 #####################################
 set(REQUIRE_LIST
+  driver
+  esp_lcd
+  esp_netif
+  esp_timer
+  lvgl
 )
 
 #####################################

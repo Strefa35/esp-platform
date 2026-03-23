@@ -16,6 +16,7 @@
 #include <stdbool.h>
 
 #include "esp_err.h"
+#include "msg.h"
 
 esp_err_t LcdCtrl_Init(void);
 esp_err_t LcdCtrl_Done(void);

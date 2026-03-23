@@ -21,5 +21,6 @@
 
 
 esp_err_t lcd_InitHw(lcd_t* lcd_ptr);
+esp_err_t lcd_DoneHw(void);
 
 #endif /* __LCD_HW_H__ */
