@@ -2,11 +2,11 @@ menu "LCD Controller"
 
     config LCD_CTRL_ENABLE
         bool "Enable LCD Controller"
-        depends on IDF_TARGET_ESP32
+        depends on IDF_TARGET_ESP32 || IDF_TARGET_ESP32S3
         default "n"
         help
             Enable LCD Controller to use by the Manager.
-            This module is supported only for ESP32 target.
+            Supported on ESP32 and ESP32-S3 targets.
 
     choice LCD_CTRL_LOG_LEVEL
         bool "LCD Controller Log level"

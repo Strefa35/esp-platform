@@ -30,6 +30,14 @@ menu "MQTT Controller"
         help
             Password
 
+    config MQTT_CTRL_RESET_CONFIG_ON_BOOT
+        bool "Reset MQTT config in NVS on boot"
+        default "n"
+        help
+            When enabled, all MQTT controller entries in NVS namespace
+            "config" are erased during startup, then default configuration
+            is recreated and stored again.
+
     choice MQTT_CTRL_LOG_LEVEL
         bool "Log level"
         default MQTT_CTRL_LOG_DEFAULT_LEVEL_INFO

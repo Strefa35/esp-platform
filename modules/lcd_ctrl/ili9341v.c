@@ -16,6 +16,7 @@
 #include "sdkconfig.h"
 
 #include "driver/gpio.h"
+#include "driver/ledc.h"
 #include "driver/spi_master.h"
 
 #include "esp_lcd_ili9341.h"
@@ -42,6 +43,13 @@
 #define LCD_PIN_NUM_LCD_CS         17
 #define LCD_PIN_NUM_BK_LIGHT       4
 
+#define LCD_BK_LIGHT_LEDC_MODE         LEDC_LOW_SPEED_MODE
+#define LCD_BK_LIGHT_LEDC_TIMER        LEDC_TIMER_0
+#define LCD_BK_LIGHT_LEDC_CHANNEL      LEDC_CHANNEL_0
+#define LCD_BK_LIGHT_LEDC_FREQ_HZ      5000
+#define LCD_BK_LIGHT_LEDC_DUTY_RES     LEDC_TIMER_13_BIT
+#define LCD_BK_LIGHT_LEDC_MAX_DUTY     ((1U << 13) - 1U)
+
 #define LCD_H_RES                  320
 #define LCD_V_RES                  240
 
@@ -54,8 +62,38 @@ static const char* TAG = "ESP::LCD::ILI9341V";
 static esp_lcd_panel_io_handle_t s_io_handle = NULL;
 static esp_lcd_panel_handle_t s_panel_handle = NULL;
 static bool s_spi_inited = false;
+static bool s_backlight_inited = false;
 static lcd_flush_done_cb_t s_flush_done_cb = NULL;
 static void* s_flush_done_ctx = NULL;
+
+
+static uint32_t lcd_BacklightPercentToDuty(uint8_t percent) {
+  if (percent > 100U) {
+    percent = 100U;
+  }
+  return (LCD_BK_LIGHT_LEDC_MAX_DUTY * percent) / 100U;
+}
+
+esp_err_t lcd_SetBacklightPercent(uint8_t percent) {
+  if (!s_backlight_inited) {
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  uint32_t duty = lcd_BacklightPercentToDuty(percent);
+  if (LCD_BK_LIGHT_ON_LEVEL == 0) {
+    duty = LCD_BK_LIGHT_LEDC_MAX_DUTY - duty;
+  }
+
+  ESP_RETURN_ON_ERROR(
+    ledc_set_duty(LCD_BK_LIGHT_LEDC_MODE, LCD_BK_LIGHT_LEDC_CHANNEL, duty),
+    TAG,
+    "ledc_set_duty failed");
+  ESP_RETURN_ON_ERROR(
+    ledc_update_duty(LCD_BK_LIGHT_LEDC_MODE, LCD_BK_LIGHT_LEDC_CHANNEL),
+    TAG,
+    "ledc_update_duty failed");
+  return ESP_OK;
+}
 
 
 /**
@@ -92,12 +130,27 @@ static esp_err_t lcd_SetupDisplayHw(lcd_t* lcd_ptr) {
   lcd_ptr->h_res = LCD_H_RES;
   lcd_ptr->v_res = LCD_V_RES;
 
-  gpio_config_t bk_gpio_config = {
-    .mode = GPIO_MODE_OUTPUT,
-    .pin_bit_mask = 1ULL << LCD_PIN_NUM_BK_LIGHT,
+  ledc_timer_config_t ledc_timer = {
+    .speed_mode = LCD_BK_LIGHT_LEDC_MODE,
+    .duty_resolution = LCD_BK_LIGHT_LEDC_DUTY_RES,
+    .timer_num = LCD_BK_LIGHT_LEDC_TIMER,
+    .freq_hz = LCD_BK_LIGHT_LEDC_FREQ_HZ,
+    .clk_cfg = LEDC_AUTO_CLK,
   };
-  ESP_RETURN_ON_ERROR(gpio_config(&bk_gpio_config), TAG, "gpio_config failed");
-  gpio_set_level(LCD_PIN_NUM_BK_LIGHT, !LCD_BK_LIGHT_ON_LEVEL);
+  ESP_RETURN_ON_ERROR(ledc_timer_config(&ledc_timer), TAG, "ledc_timer_config failed");
+
+  ledc_channel_config_t ledc_channel = {
+    .gpio_num = LCD_PIN_NUM_BK_LIGHT,
+    .speed_mode = LCD_BK_LIGHT_LEDC_MODE,
+    .channel = LCD_BK_LIGHT_LEDC_CHANNEL,
+    .intr_type = LEDC_INTR_DISABLE,
+    .timer_sel = LCD_BK_LIGHT_LEDC_TIMER,
+    .duty = 0,
+    .hpoint = 0,
+  };
+  ESP_RETURN_ON_ERROR(ledc_channel_config(&ledc_channel), TAG, "ledc_channel_config failed");
+  s_backlight_inited = true;
+  ESP_RETURN_ON_ERROR(lcd_SetBacklightPercent(0), TAG, "backlight set failed");
 
   spi_bus_config_t buscfg = {
     .sclk_io_num = LCD_PIN_NUM_SCLK,
@@ -151,7 +204,7 @@ static esp_err_t lcd_SetupDisplayHw(lcd_t* lcd_ptr) {
   ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel_handle, false, false), TAG, "panel mirror failed");
   ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel_handle, true), TAG, "panel on failed");
 
-  gpio_set_level(LCD_PIN_NUM_BK_LIGHT, LCD_BK_LIGHT_ON_LEVEL);
+  ESP_RETURN_ON_ERROR(lcd_SetBacklightPercent(100), TAG, "backlight set failed");
 
   lcd_ptr->buffer_size = (size_t) ((lcd_ptr->h_res * lcd_ptr->v_res) / 10U) * sizeof(uint16_t);
   lcd_ptr->buffer1 = spi_bus_dma_memory_alloc(LCD_HOST, lcd_ptr->buffer_size, 0);
@@ -189,7 +242,9 @@ esp_err_t lcd_DoneDisplayHw(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
 
   if (s_panel_handle != NULL) {
-    gpio_set_level(LCD_PIN_NUM_BK_LIGHT, !LCD_BK_LIGHT_ON_LEVEL);
+    if (s_backlight_inited) {
+      lcd_SetBacklightPercent(0);
+    }
     esp_lcd_panel_del(s_panel_handle);
     s_panel_handle = NULL;
   }
@@ -201,6 +256,11 @@ esp_err_t lcd_DoneDisplayHw(void) {
 
   s_flush_done_cb = NULL;
   s_flush_done_ctx = NULL;
+
+  if (s_backlight_inited) {
+    ledc_stop(LCD_BK_LIGHT_LEDC_MODE, LCD_BK_LIGHT_LEDC_CHANNEL, !LCD_BK_LIGHT_ON_LEVEL);
+    s_backlight_inited = false;
+  }
 
   if (s_spi_inited) {
     result = spi_bus_free(LCD_HOST);

@@ -24,6 +24,7 @@ esp_err_t NVS_Open(const char* partition, nvs_t* const handle_ptr);
 esp_err_t NVS_Close(nvs_t handle);
 esp_err_t NVS_Read(const nvs_t handle, const char *key, void* data_ptr, size_t* data_size);
 esp_err_t NVS_Write(const nvs_t handle, const char *key, void* data_ptr, size_t data_size);
+esp_err_t NVS_EraseAll(const nvs_t handle);
 
 esp_err_t NVS_Init(void);
 esp_err_t NVS_Done(void);

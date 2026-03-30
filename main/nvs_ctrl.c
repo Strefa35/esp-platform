@@ -144,6 +144,26 @@ esp_err_t NVS_Write(const nvs_t handle, const char *key, void* data_ptr, size_t 
 }
 
 /**
+ * @brief Erase all keys from opened NVS namespace
+ *
+ * \param handle - nvs handle
+ * \return esp_err_t ESP_OK on success, or an error code on failure
+ */
+esp_err_t NVS_EraseAll(const nvs_t handle) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s(handle: %p)", __func__, handle);
+  if (handle->nvs_handle) {
+    result = nvs_erase_all(handle->nvs_handle);
+    if (result == ESP_OK) {
+      result = nvs_commit(handle->nvs_handle);
+    }
+  }
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
  * @brief Init NVS
  * 
  * \return esp_err_t ESP_OK on success, or an error code on failure

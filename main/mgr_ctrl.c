@@ -338,11 +338,27 @@ void mgr_SubscribeList(void) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
-void mgr_StartMqtt(void) {
+static void mgr_StartMqtt(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
   if (mgr_send_to_mqtt_fn) {
     msg_t msg = {
       .type = MSG_TYPE_MQTT_START,
+      .from = REG_MGR_CTRL,
+      .to = REG_MQTT_CTRL,
+    };
+    esp_err_t result = mgr_send_to_mqtt_fn(&msg);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] Send() - Error: %d", __func__, result);
+    }
+  }
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
+static void mgr_StopMqtt(void) {
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (mgr_send_to_mqtt_fn) {
+    msg_t msg = {
+      .type = MSG_TYPE_MQTT_STOP,
       .from = REG_MGR_CTRL,
       .to = REG_MQTT_CTRL,
     };
@@ -486,6 +502,10 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       data_eth_event_e event_id = msg->payload.eth.u.event_id;
 
       ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, event_id, GET_DATA_ETH_EVENT_NAME(event_id));
+
+      if (event_id == DATA_ETH_EVENT_DISCONNECTED) {
+        mgr_StopMqtt();
+      }
       break;
     }
 

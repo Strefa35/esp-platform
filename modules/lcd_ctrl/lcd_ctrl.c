@@ -28,8 +28,8 @@
 #include "lut.h"
 
 
-#if !CONFIG_IDF_TARGET_ESP32
-#error "lcd_ctrl supports only ESP32 target (IDF_TARGET=esp32)."
+#if !CONFIG_IDF_TARGET_ESP32 && !CONFIG_IDF_TARGET_ESP32S3
+#error "lcd_ctrl supports only ESP32 and ESP32-S3 targets."
 #endif
 
 
@@ -41,6 +41,64 @@
 
 
 static const char* TAG = "ESP::LCD";
+
+static void lcdctrl_ApplyEthEvent(data_eth_event_e event_id) {
+  bool connected = false;
+  bool update = true;
+
+  ESP_LOGI(TAG, "++%s(event_id: %d [%s])", __func__, event_id, GET_DATA_ETH_EVENT_NAME(event_id));
+  switch (event_id) {
+    case DATA_ETH_EVENT_CONNECTED: {
+      connected = true;
+      break;
+    }
+    case DATA_ETH_EVENT_DISCONNECTED: {
+      connected = false;
+      break;
+    }
+    case DATA_ETH_EVENT_STOP: {
+      connected = false;
+      break;
+    }
+    default: {
+      update = false;
+      break;
+    }
+  }
+  if (update) {
+    lcd_update_t u = {0};
+    u.u.d_bool[0] = connected;
+    lcd_UpdateData(LCD_MASK_ETH_CONNECTED, &u);
+  }
+  ESP_LOGI(TAG, "--%s() - update: %d, connected: %d", __func__, update, connected);
+}
+
+static void lcdctrl_ApplyMqttEvent(data_mqtt_event_e event_id) {
+  bool connected = false;
+  bool update = true;
+
+  ESP_LOGI(TAG, "++%s(event_id: %d [%s])", __func__, event_id, GET_DATA_MQTT_EVENT_NAME(event_id));
+  switch (event_id) {
+    case DATA_MQTT_EVENT_CONNECTED: {
+      connected = true;
+      break;
+    }
+    case DATA_MQTT_EVENT_DISCONNECTED: {
+      connected = false;
+      break;
+    }
+    default: {
+      update = false;
+      break;
+    }
+  }
+  if (update) {
+    lcd_update_t u = {0};
+    u.u.d_bool[2] = connected;
+    lcd_UpdateData(LCD_MASK_MQTT_CONNECTED, &u);
+  }
+  ESP_LOGI(TAG, "--%s() - update: %d, connected: %d", __func__, update, connected);
+}
 
 static QueueHandle_t      lcd_msg_queue = NULL;
 static TaskHandle_t       lcd_task_id = NULL;
@@ -74,17 +132,35 @@ static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
       break;
     }
     case MSG_TYPE_MGR_UID: {
-      lcd_UpdateUid(msg->payload.mgr.uid);
+      lcd_update_t u = {0};
+      strncpy(u.uid, msg->payload.mgr.uid, sizeof(u.uid) - 1);
+      u.uid[sizeof(u.uid) - 1] = '\0';
+      lcd_UpdateData(LCD_MASK_UID, &u);
       break;
     }
     case MSG_TYPE_ETH_MAC: {
-      lcd_UpdateMac(msg->payload.eth.u.mac);
+      lcd_update_t u = {0};
+      memcpy(u.u.d_uint8, msg->payload.eth.u.mac, 6);
+      lcd_UpdateData(LCD_MASK_MAC, &u);
       break;
     }
     case MSG_TYPE_ETH_IP: {
-      lcd_UpdateIp(msg->payload.eth.u.info.ip);
+      lcd_update_t u = {0};
+      u.ip = msg->payload.eth.u.info.ip;
+      lcd_UpdateData(LCD_MASK_IP, &u);
       break;
     }
+
+    case MSG_TYPE_ETH_EVENT: {
+      lcdctrl_ApplyEthEvent(msg->payload.eth.u.event_id);
+      break;
+    }
+
+    case MSG_TYPE_MQTT_EVENT: {
+      lcdctrl_ApplyMqttEvent(msg->payload.mqtt.u.event_id);
+      break;
+    }
+
     default: {
       result = ESP_FAIL;
       break;
@@ -101,6 +177,7 @@ static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
  */
 static void lcdctrl_TaskFn(void* param) {
   msg_t msg;
+
   bool loop = true;
   esp_err_t result;
 

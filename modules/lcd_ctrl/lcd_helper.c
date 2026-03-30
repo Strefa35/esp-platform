@@ -18,14 +18,12 @@
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_log.h"
-#include "esp_netif.h"
+#include "esp_netif_ip_addr.h"
 #include "esp_timer.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
-
-#include "lwip/ip4_addr.h"
 
 #include "ili9341v.h"
 #include "lcd_defs.h"
@@ -33,19 +31,35 @@
 #include "lcd_hw.h"
 #include "lvgl.h"
 #include "ns2009.h"
+#include "ui_main_screen.h"
+#include "ui_screensaver.h"
 
+/** Set to 1 to restore idle timeout and screensaver (ui_screensaver.c kept in tree). */
+#define LCD_SCREENSAVER_IDLE_ENABLE 0
 
 #define LCD_UI_TASK_NAME             "lcd-ui"
-#define LCD_UI_TASK_STACK_SIZE       6144
+/* LVGL main + complex flex UI + timer callbacks need more than 6 KB on Xtensa. */
+#define LCD_UI_TASK_STACK_SIZE       (16 * 1024)
 #define LCD_UI_TASK_PRIORITY         9
 
 #define LCD_LVGL_TICK_MS             2
 #define LCD_LVGL_HANDLER_MS          10
+#define LCD_SCREENSAVER_IDLE_MS      (15 * 1000) /* 15 seconds of inactivity before switching to screensaver */
+#define LCD_BRIGHTNESS_MAIN_PCT      100
+#define LCD_BRIGHTNESS_SAVER_PCT     10
+#define LCD_TOUCH_STABLE_SAMPLES     3
 
-#define LCD_UI_NAV_HEIGHT            38
-#define LCD_UI_PAGES_HEIGHT          184
-#define LCD_UI_TEXT_COLOR            0x000000
+typedef struct {
+  uint32_t update; /* Last lcd_UpdateData() mask argument */
+  uint32_t mask;   /* Accumulated mask (fields ever updated) */
 
+  bool     eth_connected;
+  bool     wifi_connected;
+  bool     mqtt_connected;
+  bool     bt_connected;
+  uint32_t ambient_lux;
+  uint32_t ambient_threshold_lux;
+} lcd_data_t;
 
 typedef struct {
   char uid[32];
@@ -78,21 +92,55 @@ static lv_display_t* s_display = NULL;
 static lv_indev_t* s_touch_indev = NULL;
 
 typedef enum {
-  LCD_PAGE_TIME = 0,
-  LCD_PAGE_CONFIG,
-  LCD_PAGE_DEVICE,
-  LCD_PAGE_MAX,
-} lcd_page_e;
+  LCD_SCREEN_MAIN = 0,
+  LCD_SCREEN_SCREENSAVER,
+} lcd_screen_t;
 
-static lcd_page_e s_active_page = LCD_PAGE_TIME;
+static lcd_screen_t s_active_screen = LCD_SCREEN_SCREENSAVER;
+static int64_t s_last_touch_us = 0;
+static bool s_touch_was_pressed = false;
+static uint8_t s_touch_press_stable_cnt = 0;
+static int32_t s_last_idle_log_s = -1;
 
-static lv_obj_t* s_menu_buttons[LCD_PAGE_MAX] = {NULL};
-static lv_obj_t* s_page_containers[LCD_PAGE_MAX] = {NULL};
+/* Aggregated UI state (connection flags, ambient): lcd_UpdateData writes, LVGL timer reads */
+static lcd_data_t s_data = {
+  .update = 0,
+  .mask = 0,
+  .eth_connected = false,
+  .wifi_connected = false,
+  .mqtt_connected = false,
+  .bt_connected = false,
+  .ambient_lux = 0,
+  .ambient_threshold_lux = 500,
+};
 
-static lv_obj_t* s_label_time_value = NULL;
-static lv_obj_t* s_label_cfg = NULL;
-static lv_obj_t* s_label_dev = NULL;
-static lv_obj_t* s_label_ctrl = NULL;
+static void lcd_set_backlight(uint8_t percent) {
+  esp_err_t result = lcd_SetBacklightPercent(percent);
+  if (result != ESP_OK) {
+    ESP_LOGW(TAG, "[%s] lcd_SetBacklightPercent(%u) failed: %d", __func__, percent, result);
+  }
+}
+
+static void lcd_switch_screen(lcd_screen_t screen) {
+  if (s_display == NULL || s_active_screen == screen) {
+    return;
+  }
+
+  lcd_screen_t prev_screen = s_active_screen;
+
+  if (screen == LCD_SCREEN_MAIN) {
+    ui_main_screen_create(s_display, NULL);
+    lcd_set_backlight(LCD_BRIGHTNESS_MAIN_PCT);
+  } else {
+    ui_screensaver_create(s_display);
+    lcd_set_backlight(LCD_BRIGHTNESS_SAVER_PCT);
+  }
+
+  s_active_screen = screen;
+  ESP_LOGD(TAG, "[%s] Screen changed: %s -> %s", __func__,
+           (prev_screen == LCD_SCREEN_MAIN) ? "main" : "screensaver",
+           (screen == LCD_SCREEN_MAIN) ? "main" : "screensaver");
+}
 
 
 /**
@@ -113,6 +161,12 @@ static void lcd_lvgl_tick_cb(void* arg) {
  * @param px_map Pixel buffer in RGB565 format.
  */
 static void lcd_lvgl_flush_cb(lv_display_t* display, const lv_area_t* area, uint8_t* px_map) {
+  uint32_t width = (uint32_t) (area->x2 - area->x1 + 1);
+  uint32_t height = (uint32_t) (area->y2 - area->y1 + 1);
+
+  /* SPI panels usually expect RGB565 bytes in opposite order than CPU memory layout. */
+  lv_draw_sw_rgb565_swap(px_map, width * height);
+
   esp_err_t result = lcd_FlushDisplayArea(area->x1, area->y1, area->x2, area->y2, px_map);
   if (result != ESP_OK) {
     lv_display_flush_ready(display);
@@ -139,102 +193,29 @@ static void lcd_lvgl_touch_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
   (void) indev;
 
   ns2009_touch_t touch = {0, 0, 0};
-  if (ns2009_GetTouch(&touch) == ESP_OK) {
+  bool touch_raw_pressed = (ns2009_GetTouch(&touch) == ESP_OK);
+  if (touch_raw_pressed) {
+    if (s_touch_press_stable_cnt < LCD_TOUCH_STABLE_SAMPLES) {
+      s_touch_press_stable_cnt++;
+    }
+
     data->state = LV_INDEV_STATE_PRESSED;
     data->point.x = touch.x;
     data->point.y = touch.y;
-  } else {
+
+    if (!s_touch_was_pressed && s_touch_press_stable_cnt >= LCD_TOUCH_STABLE_SAMPLES) {
+      s_touch_was_pressed = true;
+      s_last_touch_us = esp_timer_get_time();
+      ESP_LOGD(TAG, "[%s] Valid touch detected (stable=%u), idle timer reset", __func__, s_touch_press_stable_cnt);
+      if (s_active_screen == LCD_SCREEN_SCREENSAVER) {
+        lcd_switch_screen(LCD_SCREEN_MAIN);
+      }
+    }
+  }
+  else {
+    s_touch_press_stable_cnt = 0;
+    s_touch_was_pressed = false;
     data->state = LV_INDEV_STATE_RELEASED;
-  }
-}
-
-/**
- * @brief Updates cached IP address from Ethernet netif when available.
- */
-static void lcd_try_update_ip_from_eth(void) {
-  esp_netif_t* eth_netif = esp_netif_get_handle_from_ifkey("ETH_DEF");
-  if (eth_netif == NULL) {
-    return;
-  }
-
-  esp_netif_ip_info_t ip_info = {0};
-  if (esp_netif_get_ip_info(eth_netif, &ip_info) != ESP_OK || ip_info.ip.addr == 0) {
-    return;
-  }
-
-  ip4_addr_t ip_addr = {
-    .addr = ip_info.ip.addr,
-  };
-
-  if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    snprintf(s_runtime.ip, sizeof(s_runtime.ip), IPSTR, IP2STR(&ip_addr));
-    xSemaphoreGive(s_state_mutex);
-  }
-}
-
-/**
- * @brief Builds comma-separated list of enabled controllers.
- *
- * @param out Output buffer.
- * @param out_len Output buffer size.
- */
-static void lcd_build_controller_list(char* out, size_t out_len) {
-  size_t used = 0;
-  out[0] = '\0';
-
-#define LCD_APPEND_CTRL(_cfg, _name) \
-  do { \
-    if (_cfg) { \
-      int n = snprintf(out + used, (used < out_len) ? (out_len - used) : 0, \
-                       "%s%s", (used == 0) ? "" : ", ", _name); \
-      if (n > 0) { \
-        used += (size_t) n; \
-        if (used >= out_len) { \
-          out[out_len - 1] = '\0'; \
-          return; \
-        } \
-      } \
-    } \
-  } while (0)
-
-#ifdef CONFIG_ETH_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "eth");
-#endif
-#ifdef CONFIG_GPIO_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "gpio");
-#endif
-#ifdef CONFIG_POWER_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "power");
-#endif
-#ifdef CONFIG_RELAY_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "relay");
-#endif
-#ifdef CONFIG_LCD_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "lcd");
-#endif
-#ifdef CONFIG_CFG_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "cfg");
-#endif
-#ifdef CONFIG_SYS_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "sys");
-#endif
-#ifdef CONFIG_CLI_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "cli");
-#endif
-#ifdef CONFIG_SENSOR_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "sensor");
-#endif
-#ifdef CONFIG_TEMPLATE_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "template");
-#endif
-#ifdef CONFIG_MQTT_CTRL_ENABLE
-  LCD_APPEND_CTRL(1, "mqtt");
-#endif
-
-#undef LCD_APPEND_CTRL
-
-  if (out[0] == '\0') {
-    snprintf(out, out_len, "none");
   }
 }
 
@@ -246,192 +227,83 @@ static void lcd_build_controller_list(char* out, size_t out_len) {
 static void lcd_ui_update_timer_cb(lv_timer_t* timer) {
   (void) timer;
 
-  char time_text[48] = {0};
-  char cfg_text[256] = {0};
-  char dev_text[256] = {0};
-  char ctrl_text[256] = {0};
+#if LCD_SCREENSAVER_IDLE_ENABLE
+  int64_t now_us = esp_timer_get_time();
+  int64_t idle_us = now_us - s_last_touch_us;
+  int32_t idle_s = (int32_t) (idle_us / 1000000LL);
+  int32_t timeout_s = (int32_t) (LCD_SCREENSAVER_IDLE_MS / 1000);
+  if (s_active_screen == LCD_SCREEN_MAIN && idle_s != s_last_idle_log_s && (idle_s % 5) == 0) {
+    int32_t remain_s = timeout_s - idle_s;
+    if (remain_s < 0) {
+      remain_s = 0;
+    }
+    ESP_LOGD(TAG, "[%s] idle=%ds, remain=%ds", __func__, idle_s, remain_s);
+    s_last_idle_log_s = idle_s;
+  }
+  if (idle_us >= ((int64_t) LCD_SCREENSAVER_IDLE_MS * 1000LL)) {
+    ESP_LOGD(TAG, "[%s] Inactivity timeout reached (idle=%ds) -> screensaver", __func__, idle_s);
+    lcd_switch_screen(LCD_SCREEN_SCREENSAVER);
+  }
+#endif
 
+  /* Format current time and date strings */
+  char time_str[16] = {0};
+  char date_str[32] = {0};
   time_t now = time(NULL);
   struct tm local_tm = {0};
   localtime_r(&now, &local_tm);
-  strftime(time_text, sizeof(time_text), "%H:%M:%S", &local_tm);
+  strftime(time_str, sizeof(time_str), "%H:%M:%S", &local_tm);
+  strftime(date_str, sizeof(date_str), "%d.%m.%Y", &local_tm);
 
-  lcd_try_update_ip_from_eth();
-
-  const char* tz = getenv("TZ");
-  if (tz == NULL || tz[0] == '\0') {
-#ifdef CONFIG_SYS_CTRL_TIMEZONE_CUSTOM
-    tz = CONFIG_SYS_CTRL_TIMEZONE_CUSTOM_STRING;
-#else
-    tz = CONFIG_SYS_CTRL_TIMEZONE_STRING;
-#endif
-  }
-
-#ifdef CONFIG_SYS_CTRL_NTP_SERVER_DEFAULT
-  const char* ntp_server = CONFIG_SYS_CTRL_NTP_SERVER_DEFAULT;
-#else
-  const char* ntp_server = "n/a";
-#endif
-
-  char uid[sizeof(s_runtime.uid)] = {0};
-  char mac[sizeof(s_runtime.mac)] = {0};
-  char ip[sizeof(s_runtime.ip)] = {0};
+  /* Snapshot shared UI data (connections + ambient); ETH link from lcd_UpdateData(LCD_MASK_ETH_CONNECTED) */
+  bool eth = false;
+  bool wifi = false;
+  bool mqtt = false;
+  bool bt = false;
+  uint32_t lux = 0;
+  uint32_t th = 500;
   if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    snprintf(uid, sizeof(uid), "%s", s_runtime.uid);
-    snprintf(mac, sizeof(mac), "%s", s_runtime.mac);
-    snprintf(ip, sizeof(ip), "%s", s_runtime.ip);
+    eth   = s_data.eth_connected;
+    wifi  = s_data.wifi_connected;
+    mqtt  = s_data.mqtt_connected;
+    bt    = s_data.bt_connected;
+    lux   = s_data.ambient_lux;
+    th    = s_data.ambient_threshold_lux;
     xSemaphoreGive(s_state_mutex);
   }
 
-  snprintf(cfg_text, sizeof(cfg_text), "Time zone: %s\nNTP server: %s", tz ? tz : "UTC0", ntp_server);
-  snprintf(dev_text, sizeof(dev_text), "UID: %s\nMAC: %s\nIP: %s", uid, mac, ip);
-  lcd_build_controller_list(ctrl_text, sizeof(ctrl_text));
-
-  if (s_label_time_value != NULL) {
-    lv_label_set_text_fmt(s_label_time_value, "%s", time_text);
-  }
-  if (s_label_cfg != NULL) {
-    lv_label_set_text(s_label_cfg, cfg_text);
-  }
-  if (s_label_dev != NULL) {
-    lv_label_set_text(s_label_dev, dev_text);
-  }
-  if (s_label_ctrl != NULL) {
-    lv_label_set_text_fmt(s_label_ctrl, "Controllers: %s", ctrl_text);
+  if (s_active_screen == LCD_SCREEN_MAIN) {
+    ui_main_screen_update_time(time_str, date_str);
+    ui_main_screen_update_eth(eth);
+    ui_main_screen_update_wifi(wifi);
+    ui_main_screen_update_mqtt(mqtt);
+    ui_main_screen_update_bluetooth(bt);
+    ui_main_screen_update_ambient_lux(lux, th, 0);
+  } else {
+    ui_screensaver_update_time(time_str, date_str);
   }
 }
 
 /**
- * @brief Switches visible page and highlights selected navigation button.
+ * @brief Creates and initializes the main LCD UI screen.
  *
- * @param page Page index to activate.
+ * @param display LVGL display instance.
  */
-static void lcd_set_active_page(lcd_page_e page) {
-  if (page >= LCD_PAGE_MAX) {
-    return;
-  }
+static void lcd_create_ui(lv_display_t* display) {
+  (void) display;
 
-  s_active_page = page;
-  for (int idx = 0; idx < (int) LCD_PAGE_MAX; ++idx) {
-    if (s_page_containers[idx] != NULL) {
-      if (idx == (int) page) {
-        lv_obj_clear_flag(s_page_containers[idx], LV_OBJ_FLAG_HIDDEN);
-      } else {
-        lv_obj_add_flag(s_page_containers[idx], LV_OBJ_FLAG_HIDDEN);
-      }
-    }
+  s_last_touch_us = esp_timer_get_time();
+  s_touch_was_pressed = false;
+  s_touch_press_stable_cnt = 0;
+  s_last_idle_log_s = -1;
 
-    if (s_menu_buttons[idx] != NULL) {
-      lv_color_t bg = (idx == (int) page) ? lv_color_hex(0x3FA7D6) : lv_color_hex(0x2A3B4D);
-      lv_obj_set_style_bg_color(s_menu_buttons[idx], bg, 0);
-    }
-  }
-}
-
-/**
- * @brief Handles navigation button click event.
- *
- * @param e LVGL event with selected page index in user data.
- */
-static void lcd_menu_btn_cb(lv_event_t* e) {
-  intptr_t idx = (intptr_t) lv_event_get_user_data(e);
-  lcd_set_active_page((lcd_page_e) idx);
-}
-
-/**
- * @brief Creates complete LCD user interface layout and widgets.
- *
- * @param display LVGL display used to create screen objects.
- */
-static void lcd_build_ui(lv_display_t* display) {
-  lv_obj_t* scr = lv_display_get_screen_active(display);
-  lv_obj_set_style_bg_color(scr, lv_color_hex(0x101820), 0);
-  lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
-  lv_obj_set_style_pad_all(scr, 6, 0);
-
-  lv_obj_t* panel = lv_obj_create(scr);
-  lv_obj_set_size(panel, LV_PCT(100), LV_PCT(100));
-  lv_obj_set_style_bg_color(panel, lv_color_hex(0x1A2533), 0);
-  lv_obj_set_style_border_color(panel, lv_color_hex(0x3FA7D6), 0);
-  lv_obj_set_style_border_width(panel, 1, 0);
-  lv_obj_set_style_pad_all(panel, 6, 0);
-  lv_obj_set_style_radius(panel, 6, 0);
-
-  lv_obj_t* pages = lv_obj_create(panel);
-  lv_obj_set_size(pages, LV_PCT(100), LCD_UI_PAGES_HEIGHT);
-  lv_obj_align(pages, LV_ALIGN_TOP_MID, 0, 0);
-  lv_obj_set_style_bg_opa(pages, LV_OPA_TRANSP, 0);
-  lv_obj_set_style_border_width(pages, 0, 0);
-  lv_obj_set_style_pad_all(pages, 0, 0);
-
-  lv_obj_t* nav = lv_obj_create(panel);
-  lv_obj_set_size(nav, LV_PCT(100), LCD_UI_NAV_HEIGHT);
-  lv_obj_align(nav, LV_ALIGN_BOTTOM_MID, 0, 0);
-  lv_obj_set_style_bg_color(nav, lv_color_hex(0x13202C), 0);
-  lv_obj_set_style_border_width(nav, 0, 0);
-  lv_obj_set_style_pad_all(nav, 4, 0);
-  lv_obj_set_layout(nav, LV_LAYOUT_FLEX);
-  lv_obj_set_flex_flow(nav, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(nav, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-  static const char* page_names[LCD_PAGE_MAX] = {
-    "Time",
-    "Config",
-    "Device",
-  };
-
-  for (int idx = 0; idx < (int) LCD_PAGE_MAX; ++idx) {
-    s_menu_buttons[idx] = lv_button_create(nav);
-    lv_obj_set_size(s_menu_buttons[idx], 96, LV_PCT(100));
-    lv_obj_set_style_bg_color(s_menu_buttons[idx], lv_color_hex(0x2A3B4D), 0);
-    lv_obj_set_style_border_width(s_menu_buttons[idx], 0, 0);
-    lv_obj_add_event_cb(s_menu_buttons[idx], lcd_menu_btn_cb, LV_EVENT_CLICKED, (void*) (intptr_t) idx);
-
-    lv_obj_t* lbl = lv_label_create(s_menu_buttons[idx]);
-    lv_label_set_text(lbl, page_names[idx]);
-    lv_obj_center(lbl);
-  }
-
-  for (int idx = 0; idx < (int) LCD_PAGE_MAX; ++idx) {
-    s_page_containers[idx] = lv_obj_create(pages);
-    lv_obj_set_size(s_page_containers[idx], LV_PCT(100), LV_PCT(100));
-    lv_obj_set_style_bg_opa(s_page_containers[idx], LV_OPA_TRANSP, 0);
-    lv_obj_set_style_border_width(s_page_containers[idx], 0, 0);
-    lv_obj_set_style_pad_all(s_page_containers[idx], 0, 0);
-    lv_obj_set_layout(s_page_containers[idx], LV_LAYOUT_FLEX);
-    lv_obj_set_flex_flow(s_page_containers[idx], LV_FLEX_FLOW_COLUMN);
-  }
-
-  lv_obj_t* time_title = lv_label_create(s_page_containers[LCD_PAGE_TIME]);
-  lv_obj_set_style_text_color(time_title, lv_color_hex(LCD_UI_TEXT_COLOR), 0);
-  lv_label_set_text(time_title, "Current time");
-
-  s_label_time_value = lv_label_create(s_page_containers[LCD_PAGE_TIME]);
-  lv_obj_set_style_text_color(s_label_time_value, lv_color_hex(LCD_UI_TEXT_COLOR), 0);
-  lv_obj_set_style_text_font(s_label_time_value, LV_FONT_DEFAULT, 0);
-  lv_label_set_text(s_label_time_value, "--:--:--");
-
-  s_label_cfg = lv_label_create(s_page_containers[LCD_PAGE_CONFIG]);
-  lv_obj_set_style_text_color(s_label_cfg, lv_color_hex(LCD_UI_TEXT_COLOR), 0);
-  lv_label_set_long_mode(s_label_cfg, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(s_label_cfg, LV_PCT(100));
-
-  s_label_dev = lv_label_create(s_page_containers[LCD_PAGE_DEVICE]);
-  lv_obj_set_style_text_color(s_label_dev, lv_color_hex(LCD_UI_TEXT_COLOR), 0);
-  lv_label_set_long_mode(s_label_dev, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(s_label_dev, LV_PCT(100));
-
-  s_label_ctrl = lv_label_create(s_page_containers[LCD_PAGE_DEVICE]);
-  lv_obj_set_style_text_color(s_label_ctrl, lv_color_hex(LCD_UI_TEXT_COLOR), 0);
-  lv_label_set_long_mode(s_label_ctrl, LV_LABEL_LONG_WRAP);
-  lv_obj_set_width(s_label_ctrl, LV_PCT(100));
-
-  lcd_set_active_page(LCD_PAGE_TIME);
+  /* Must not set s_active_screen to MAIN here: lcd_switch_screen() no-ops when
+   * already on the target screen, so the UI would never be created. */
+  lcd_switch_screen(LCD_SCREEN_MAIN);
 
   lv_timer_create(lcd_ui_update_timer_cb, 1000, NULL);
   lcd_ui_update_timer_cb(NULL);
 }
-
 
 /**
  * @brief Runs LVGL handler loop in dedicated FreeRTOS task.
@@ -465,9 +337,30 @@ static esp_err_t lcd_InitLvgl(lcd_t* lcd_ptr) {
     return ESP_FAIL;
   }
 
+  /**
+   * @brief Sets the color format for the LVGL display to RGB565.
+   * 
+   * This function configures the display to use the RGB565 color format,
+   * which is a 16-bit color representation where:
+   * - 5 bits for red channel
+   * - 6 bits for green channel
+   * - 5 bits for blue channel
+   * 
+   * RGB565 is commonly used in embedded systems and LCD displays because:
+   * - It provides a good balance between color depth and memory usage
+   * - It requires less memory than RGB888 (24-bit)
+   * - It's supported by most LCD controllers and display hardware
+   * - It's suitable for displaying graphics and UI elements on IoT devices
+   * 
+   * @param s_display Pointer to the LVGL display object to configure
+   * @param LV_COLOR_FORMAT_RGB565 The RGB565 color format constant
+   */
   lv_display_set_color_format(s_display, LV_COLOR_FORMAT_RGB565);
+
   lv_display_set_buffers(s_display, lcd_ptr->buffer1, lcd_ptr->buffer2, lcd_ptr->buffer_size, LV_DISPLAY_RENDER_MODE_PARTIAL);
+  
   lv_display_set_flush_cb(s_display, lcd_lvgl_flush_cb);
+  
   ESP_RETURN_ON_ERROR(lcd_SetFlushDoneCallback(lcd_lvgl_flush_done_cb, s_display), TAG, "lcd_SetFlushDoneCallback failed");
 
 #if CONFIG_LCD_UI_ROTATION_90
@@ -497,7 +390,7 @@ static esp_err_t lcd_InitLvgl(lcd_t* lcd_ptr) {
   ESP_RETURN_ON_ERROR(esp_timer_create(&tick_timer_args, &s_tick_timer), TAG, "esp_timer_create failed");
   ESP_RETURN_ON_ERROR(esp_timer_start_periodic(s_tick_timer, LCD_LVGL_TICK_MS * 1000), TAG, "esp_timer_start_periodic failed");
 
-  lcd_build_ui(s_display);
+  lcd_create_ui(s_display);
 
   BaseType_t ok = xTaskCreate(lcd_lvgl_task, LCD_UI_TASK_NAME, LCD_UI_TASK_STACK_SIZE, NULL, LCD_UI_TASK_PRIORITY, &s_ui_task);
   if (ok != pdPASS) {
@@ -509,54 +402,52 @@ static esp_err_t lcd_InitLvgl(lcd_t* lcd_ptr) {
 }
 
 /**
- * @brief Updates device UID shown on LCD.
- *
- * @param uid Zero-terminated UID string.
+ * Apply batched UI field updates. For connection masks, use d_bool[0]…[3] in mask bit order
+ * (ETH=0, WIFI=1, MQTT=2, BT=3). Ambient, UID, MAC, IP: see lcd_update_t in lcd_helper.h.
  */
-void lcd_UpdateUid(const char* uid) {
-  if (uid == NULL || s_state_mutex == NULL) {
+void lcd_UpdateData(const uint32_t mask, const lcd_update_t* update) {
+  if (s_state_mutex == NULL || update == NULL) {
     return;
   }
-
   if (xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    snprintf(s_runtime.uid, sizeof(s_runtime.uid), "%s", uid);
-    xSemaphoreGive(s_state_mutex);
-  }
-}
+    if (mask & LCD_MASK_ETH_CONNECTED) {
+      s_data.eth_connected = update->u.d_bool[0];
+    }
+    if (mask & LCD_MASK_WIFI_CONNECTED) {
+      s_data.wifi_connected = update->u.d_bool[1];
+    }
+    if (mask & LCD_MASK_MQTT_CONNECTED) {
+      s_data.mqtt_connected = update->u.d_bool[2];
+    }
+    if (mask & LCD_MASK_BT_CONNECTED) {
+      s_data.bt_connected = update->u.d_bool[3];
+    }
 
-/**
- * @brief Updates device MAC address shown on LCD.
- *
- * @param mac Pointer to 6-byte MAC address.
- */
-void lcd_UpdateMac(const uint8_t mac[6]) {
-  if (mac == NULL || s_state_mutex == NULL) {
-    return;
-  }
+    if (mask & LCD_MASK_AMBIENT_LUX) {
+      s_data.ambient_lux = update->u.d_uint32[0];
+    }
+    if (mask & LCD_MASK_AMBIENT_THRESHOLD) {
+      s_data.ambient_threshold_lux = update->u.d_uint32[1];
+    }
 
-  if (xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    snprintf(s_runtime.mac, sizeof(s_runtime.mac), "%02X:%02X:%02X:%02X:%02X:%02X",
-             mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    xSemaphoreGive(s_state_mutex);
-  }
-}
+    if (mask & LCD_MASK_UID) {
+      snprintf(s_runtime.uid, sizeof(s_runtime.uid), "%s", update->uid);
+    }
+    if (mask & LCD_MASK_MAC) {
+      snprintf(s_runtime.mac, sizeof(s_runtime.mac), "%02X:%02X:%02X:%02X:%02X:%02X",
+               update->u.d_uint8[0], update->u.d_uint8[1], update->u.d_uint8[2],
+               update->u.d_uint8[3], update->u.d_uint8[4], update->u.d_uint8[5]);
+    }
+    if (mask & LCD_MASK_IP) {
+      if (update->ip != 0) {
+        esp_ip4_addr_t ip = { .addr = update->ip };
+        snprintf(s_runtime.ip, sizeof(s_runtime.ip), IPSTR, IP2STR(&ip));
+      }
+    }
 
-/**
- * @brief Updates device IP address shown on LCD.
- *
- * @param ip_addr IPv4 address in network byte order.
- */
-void lcd_UpdateIp(uint32_t ip_addr) {
-  if (s_state_mutex == NULL || ip_addr == 0) {
-    return;
-  }
+    s_data.update = mask;
+    s_data.mask |= mask;
 
-  ip4_addr_t ip = {
-    .addr = ip_addr,
-  };
-
-  if (xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    snprintf(s_runtime.ip, sizeof(s_runtime.ip), IPSTR, IP2STR(&ip));
     xSemaphoreGive(s_state_mutex);
   }
 }

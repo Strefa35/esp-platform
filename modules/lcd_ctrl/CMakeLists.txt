@@ -9,13 +9,16 @@ set(SOURCE_LIST
   lcd_hw.c
   ili9341v.c
   ns2009.c
+  fonts/lv_font_material_icons_22.c
+  ui/ui_main_screen.c
+  ui/ui_screensaver.c
 )
 
 #####################################
 #### INCLUDE_LIST
 #####################################
 set(INCLUDE_LIST
-  include ../../include
+  include ../../include ui
 )
 
 #####################################

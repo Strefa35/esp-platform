@@ -399,6 +399,16 @@ static esp_err_t mqttctrl_InitConfigPartition(void) {
     return result;
   }
 
+#if CONFIG_MQTT_CTRL_RESET_CONFIG_ON_BOOT
+  /* Force clean config namespace and recreate defaults from build-time settings. */
+  ESP_LOGW(TAG, "[%s] CONFIG_MQTT_CTRL_RESET_CONFIG_ON_BOOT enabled - erasing MQTT config namespace", __func__);
+  result = NVS_EraseAll(mqtt_config_nvs_handle);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] Failed to erase MQTT config namespace", __func__);
+    return result;
+  }
+#endif
+
   /* Initialize default configurations if missing or corrupted */
   result = mqttctrl_InitDefaultConfigs();
   if (result != ESP_OK) {
@@ -1080,12 +1090,20 @@ static esp_err_t mqttctrl_ParseMsg(const msg_t* msg) {
       }
       break;
     }
+    case MSG_TYPE_MQTT_STOP: {
+      result = mqttctrl_StopClient();
+      if (result != ESP_OK) {
+        ESP_LOGE(TAG, "[%s] mqttctrl_StopClient() - result: %d", __func__, result);
+      }
+      break;
+    }
+
     case MSG_TYPE_MQTT_EVENT: {
       data_mqtt_event_e event_id = msg->payload.mqtt.u.event_id;
 
       ESP_LOGD(TAG, "[%s] event_id: %d [%s]", __func__, event_id, GET_DATA_MQTT_EVENT_NAME(event_id));
       if (event_id == DATA_MQTT_EVENT_DISCONNECTED) {
-        result = mqttctrl_StopClient();
+        //result = mqttctrl_StopClient();
       } else if (event_id == DATA_MQTT_EVENT_CONNECTED) {
         /* Config update confirmation is handled in event handler */
       }
