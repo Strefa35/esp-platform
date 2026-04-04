@@ -30,6 +30,24 @@ set(PRIV_REQUIRE_LIST
   nvs_flash json
 )
 
+# Early expansion runs each component CMakeLists in script mode before sdkconfig exists, so CONFIG_*
+# is unset and conditional PRIV_REQUIRES below would be skipped. Declare the same optional deps here
+# so the component dependency graph and compile include paths stay consistent with the real pass.
+if(CMAKE_BUILD_EARLY_EXPANSION)
+  list(APPEND PRIV_REQUIRE_LIST
+    eth_ctrl
+    cfg_ctrl
+    sys_ctrl
+    cli_ctrl
+    gpio_ctrl
+    relay_ctrl
+    lcd_ctrl
+    sensor_ctrl
+    template_ctrl
+    mqtt_ctrl
+  )
+endif()
+
 if(CONFIG_ETH_CTRL_ENABLE)
    list(APPEND INCLUDE_LIST  ../modules/eth_ctrl/include)
    list(APPEND PRIV_REQUIRE_LIST eth_ctrl)
