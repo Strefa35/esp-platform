@@ -501,6 +501,10 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       data_eth_event_e event_id = msg->payload.eth.u.event_id;
 
       ESP_LOGD(TAG, "[%s] Event: %d [%s]", __func__, event_id, GET_DATA_ETH_EVENT_NAME(event_id));
+
+      if (event_id == DATA_ETH_EVENT_DISCONNECTED) {
+        mgr_StopMqtt();
+      }
       break;
     }
 
@@ -746,7 +750,7 @@ esp_err_t MGR_Send(const msg_t* msg) {
 
 esp_err_t MGR_GetData(uint32_t module_type, data_type_e data_type, mgr_reg_data_cb_f cb, void *cb_ctx)
 {
-  ESP_LOGI(TAG, "++%s(module_type: 0x%08lx, data_type: %d [%s])", __func__, module_type, data_type, GET_DATA_TYPE_NAME(data_type));
+  ESP_LOGI(TAG, "++%s(module_type: 0x%08x, data_type: %d [%s])", __func__, module_type, data_type, GET_DATA_TYPE_NAME(data_type));
   if (cb == NULL) {
     return ESP_ERR_INVALID_ARG;
   }

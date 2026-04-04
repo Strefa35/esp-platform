@@ -152,6 +152,11 @@ esp_err_t NVS_Write(const nvs_t handle, const char *key, void* data_ptr, size_t 
 esp_err_t NVS_EraseAll(const nvs_t handle) {
   esp_err_t result = ESP_OK;
 
+  if (handle == NULL) {
+    ESP_LOGE(TAG, "[%s] handle=NULL", __func__);
+    return ESP_ERR_INVALID_ARG;
+  }
+
   ESP_LOGI(TAG, "++%s(handle: %p)", __func__, handle);
   if (handle->nvs_handle) {
     result = nvs_erase_all(handle->nvs_handle);

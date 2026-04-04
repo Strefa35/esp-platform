@@ -26,7 +26,7 @@ esp_err_t MGR_Send(const msg_t* msg);
 
 /**
  * Dispatch bulk data read. @p module_type must be exactly one `REG_*_CTRL` bit (e.g.
- * `REG_WIFI_CTRL`); otherwise `ESP_ERR_INVALID_ARG`. Finds the first registered entry whose
+ * `REG_MQTT_CTRL`); otherwise `ESP_ERR_INVALID_ARG`. Finds the first registered entry whose
  * `type` overlaps that bit; if `get_fn` is set, calls `get_fn(kind, cb, cb_ctx)` (the module
  * invokes @p cb zero or more times). `ESP_ERR_NOT_SUPPORTED` if the module matches but has no
  * `get_fn`; `ESP_ERR_NOT_FOUND` if no entry matches.
