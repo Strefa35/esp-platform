@@ -27,5 +27,4 @@ esp_err_t sensor_RunTsl2561(void);
 esp_err_t sensor_SetTsl2561(const cJSON* data, cJSON* response);
 esp_err_t sensor_GetTsl2561(const cJSON* data, cJSON* response);
 
-
 #endif /* __SENSOR_TSL2561_H__ */

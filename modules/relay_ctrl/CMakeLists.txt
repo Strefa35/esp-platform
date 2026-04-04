@@ -24,7 +24,7 @@ set(REQUIRE_LIST
 #### PRIV_REQUIRE_LIST
 #####################################
 set(PRIV_REQUIRE_LIST 
-  esp_driver_gpio fmt json
+  esp_driver_gpio json
 )
 
 #####################################

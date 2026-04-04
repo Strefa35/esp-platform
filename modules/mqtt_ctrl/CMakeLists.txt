@@ -24,7 +24,7 @@ set(REQUIRE_LIST
 #### PRIV_REQUIRE_LIST
 #####################################
 set(PRIV_REQUIRE_LIST 
-  mqtt fmt json
+  mqtt json
 )
 
 #####################################
