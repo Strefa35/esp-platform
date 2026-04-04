@@ -1,8 +1,12 @@
 /**
- * Copyright (C) 2025 4Embeddes.Systems
- * All rights reserved. 
- * 
- * Find details copyright statement at "LICENSE" file.
+ * @file main.c
+ * @author A.Czerwinski@pistacje.net
+ * @brief Application entry point
+ * @version 0.1
+ * @date 2026-03-29
+ *
+ * @copyright Copyright (c) 2025 4Embedded.Systems
+ *
  */
 #include <stdio.h>
 #include <stdbool.h>

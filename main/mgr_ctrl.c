@@ -28,7 +28,6 @@
 #include "err.h"
 #include "lut.h"
 
-
 #define MGR_TASK_NAME           "mgr-task"
 #define MGR_TASK_STACK_SIZE     4096
 #define MGR_TASK_PRIORITY       8
@@ -338,11 +337,27 @@ void mgr_SubscribeList(void) {
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
-void mgr_StartMqtt(void) {
+static void mgr_StartMqtt(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
   if (mgr_send_to_mqtt_fn) {
     msg_t msg = {
       .type = MSG_TYPE_MQTT_START,
+      .from = REG_MGR_CTRL,
+      .to = REG_MQTT_CTRL,
+    };
+    esp_err_t result = mgr_send_to_mqtt_fn(&msg);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s] Send() - Error: %d", __func__, result);
+    }
+  }
+  ESP_LOGI(TAG, "--%s()", __func__);
+}
+
+static void mgr_StopMqtt(void) {
+  ESP_LOGI(TAG, "++%s()", __func__);
+  if (mgr_send_to_mqtt_fn) {
+    msg_t msg = {
+      .type = MSG_TYPE_MQTT_STOP,
       .from = REG_MGR_CTRL,
       .to = REG_MQTT_CTRL,
     };
@@ -727,4 +742,31 @@ esp_err_t MGR_Send(const msg_t* msg) {
   result = mgr_Send(msg);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
+}
+
+esp_err_t MGR_GetData(uint32_t module_type, data_type_e data_type, mgr_reg_data_cb_f cb, void *cb_ctx)
+{
+  ESP_LOGI(TAG, "++%s(module_type: 0x%08lx, data_type: %d [%s])", __func__, module_type, data_type, GET_DATA_TYPE_NAME(data_type));
+  if (cb == NULL) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  if ((module_type == 0U) || (module_type & (module_type - 1U)) != 0U) {
+    ESP_LOGI(TAG, "[%s] Invalid module type: %d", __func__, module_type);
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  /* Hot path cost is almost always inside get_fn; this loop is tiny (MGR_REG_LIST_CNT). */
+  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+    if ((mgr_reg_list[idx].type & module_type) == 0U) {
+      continue;
+    }
+    if (mgr_reg_list[idx].get_fn == NULL) {
+      ESP_LOGI(TAG, "[%s] get_fn() is NULL for module: '%s'", __func__, mgr_reg_list[idx].name);
+      return ESP_ERR_NOT_SUPPORTED;
+    }
+    ESP_LOGI(TAG, "[%s] Call get_fn() for module: '%s'", __func__, mgr_reg_list[idx].name);
+    return mgr_reg_list[idx].get_fn(data_type, cb, cb_ctx);
+  }
+  ESP_LOGI(TAG, "--%s() - result: ESP_ERR_NOT_FOUND", __func__);
+  return ESP_ERR_NOT_FOUND;
 }

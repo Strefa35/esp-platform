@@ -13,6 +13,7 @@
 #define __LUT_H__
 
 #include "msg.h"
+#include "data.h"
 
 #define GET_MSG_TYPE_NAME(_type) ( \
   _type == MSG_TYPE_INIT                      ? "MSG_TYPE_INIT"                   : \
@@ -24,6 +25,7 @@
   _type == MSG_TYPE_ETH_MAC                   ? "MSG_TYPE_ETH_MAC"                : \
   _type == MSG_TYPE_ETH_IP                    ? "MSG_TYPE_ETH_IP"                 : \
   _type == MSG_TYPE_MQTT_START                ? "MSG_TYPE_MQTT_START"             : \
+  _type == MSG_TYPE_MQTT_STOP                 ? "MSG_TYPE_MQTT_STOP"              : \
   _type == MSG_TYPE_MQTT_EVENT                ? "MSG_TYPE_MQTT_EVENT"             : \
   _type == MSG_TYPE_MQTT_DATA                 ? "MSG_TYPE_MQTT_DATA"              : \
   _type == MSG_TYPE_MQTT_PUBLISH              ? "MSG_TYPE_MQTT_PUBLISH"           : \
@@ -32,6 +34,14 @@
   _type == MSG_TYPE_SENSORS                   ? "MSG_TYPE_SENSORS"                : \
   _type == MSG_TYPE_LCD_DATA                  ? "MSG_TYPE_LCD_DATA"               : \
                                                 "MSG_TYPE_UNKNOWN"                  \
+)
+
+#define GET_DATA_TYPE_NAME(_type) ( \
+  _type == DATA_TYPE_NONE               ? "DATA_TYPE_NONE"               : \
+  _type == DATA_TYPE_WIFI_SCAN_LIST     ? "DATA_TYPE_WIFI_SCAN_LIST"   : \
+  _type == DATA_TYPE_WIFI_CONNECT_STATUS ? "DATA_TYPE_WIFI_CONNECT_STATUS" : \
+  _type == DATA_TYPE_MAX                ? "DATA_TYPE_MAX"                : \
+                                          "DATA_TYPE_UNKNOWN"              \
 )
 
 #define GET_DATA_ETH_EVENT_NAME(_event) ( \

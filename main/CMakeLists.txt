@@ -27,7 +27,7 @@ set(REQUIRE_LIST
 #### PRIV_REQUIRE_LIST
 #####################################
 set(PRIV_REQUIRE_LIST 
-  nvs_flash fmt json
+  nvs_flash json
 )
 
 if(CONFIG_ETH_CTRL_ENABLE)
