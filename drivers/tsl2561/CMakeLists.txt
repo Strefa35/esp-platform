@@ -9,7 +9,10 @@ set(SOURCE_LIST
 #####################################
 #### INCLUDE_LIST
 #####################################
+# Headers are always visible so dependents (e.g. sensor_ctrl) can include tsl2561.h
+# whenever the sensor or driver is enabled; object code is built only when needed.
 set(INCLUDE_LIST
+  include
 )
 
 #####################################
@@ -26,9 +29,8 @@ set(PRIV_REQUIRE_LIST
   esp_driver_i2c
 )
 
-if(CONFIG_TSL2561_ENABLE)
-  set(SOURCE_LIST   src/tsl2561.c)
-  set(INCLUDE_LIST  include)
+if(CONFIG_TSL2561_ENABLE OR CONFIG_SENSOR_TSL2561_ENABLE)
+  set(SOURCE_LIST src/tsl2561.c)
 endif()
 
 #####################################

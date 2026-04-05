@@ -41,8 +41,10 @@ menu "Sensor Controller"
     config SENSOR_TSL2561_ENABLE
         bool "Enable Light Sensor TSL2561"
         default "n"
+        select TSL2561_ENABLE
         help
-            Enable Light Sensor TSL2561 to use in Sensors Controller
+            Enable Light Sensor TSL2561 to use in Sensors Controller.
+            Also enables the TSL2561 driver (I2C pins, timing, etc.).
 
         choice SENSOR_TSL2561_LOG_LEVEL
             bool "Log level"

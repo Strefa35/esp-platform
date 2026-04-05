@@ -9,6 +9,7 @@
  * 
  */
 #include <stdio.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -59,7 +60,7 @@ static const i2c_device_config_t tsl2561_dev_cfg = {
 };
 
 
-static const char* TAG = "ESP::DRV::TLS256X";
+static const char* TAG = "ESP::DRV::TSL256X";
 
 static void tsl2561_print(const tsl2561_t handle) {
   ESP_LOGI(TAG, "++%s(handle: %p)", __func__, handle);
@@ -72,7 +73,7 @@ static void tsl2561_print(const tsl2561_t handle) {
   ESP_LOGI(TAG, "     integ: %d", handle->integ);
   ESP_LOGI(TAG, "        ms: %d", handle->ms);
   ESP_LOGI(TAG, "isr_notify: %p", handle->isr_notify);
-  ESP_LOGI(TAG, " threshold: [%d - %d]", handle->threshold.min, handle->threshold.min);
+  ESP_LOGI(TAG, " threshold: [%d - %d]", handle->threshold.min, handle->threshold.max);
   ESP_LOGI(TAG, "--%s()", __func__);
 }
 
@@ -156,10 +157,10 @@ static esp_err_t tsl2561_setIsrConfig(tsl2561_t handle, const bool enable) {
 static esp_err_t tsl2561_read(const tsl2561_t handle, uint8_t* data_ptr, size_t data_size) {
   esp_err_t result = ESP_OK;
 
-  ESP_LOGI(TAG, "++%s(handle: %p, data_ptr: %p, data_size: %d)", __func__, handle, data_ptr, data_size);
+  ESP_LOGI(TAG, "++%s(handle: %p, data_ptr: %p, data_size: %zu)", __func__, handle, data_ptr, data_size);
   result = i2c_master_receive(handle->device, data_ptr, data_size, -1);
   if (result != ESP_OK) {
-    ESP_LOGE(TAG, "[%s] i2c_master_transmit() failed: %d.", __func__, result);
+    ESP_LOGE(TAG, "[%s] i2c_master_receive() failed: %d.", __func__, result);
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
@@ -414,7 +415,7 @@ static esp_err_t tsl2561_readChannels(const tsl2561_t handle) {
     ESP_LOGE(TAG, "[%s] tsl2561_read() - failed: %d.", __func__, result);
     return result;
   }
-  ESP_LOGD(TAG, "[%s] <- data: 0x%02X%02X", __func__, data_ch1[1], data_ch1[0]);
+  ESP_LOGD(TAG, "[%s] <- data: 0x%02X%02X", __func__, data_ch0[1], data_ch0[0]);
   handle->broadband = (data_ch0[1] << 8) | data_ch0[0];
   ESP_LOGD(TAG, "--> CH0: 0x%04X [%d]", handle->broadband, handle->broadband);
 
@@ -501,51 +502,51 @@ static esp_err_t tsl2561_setIsrControl(const tsl2561_t handle, const tsl2561_ctr
  */
 static esp_err_t tsl2561_setThreshold(const tsl2561_t handle, const tsl2561_threshold_t* threshold) {
   esp_err_t result = ESP_OK;
+  uint16_t min = 0;
+  uint16_t max = 0;
 
   ESP_LOGI(TAG, "++%s(handle: %p, threshold: %p)", __func__, handle, threshold);
   if (threshold) {
-    uint8_t cmd_min = TSL2561_REG_COMMAND | TSL2561_CMD_WORD_PROTOCOL | TSL2561_REG_THRESH_L;
-    uint8_t cmd_max = TSL2561_REG_COMMAND | TSL2561_CMD_WORD_PROTOCOL | TSL2561_REG_THRESH_H;
-    uint8_t data_min[2] = { threshold->min & 0x00FF, (threshold->min & 0xFF00) >> 8 };
-    uint8_t data_max[2] = { threshold->max & 0x00FF, (threshold->max & 0xFF00) >> 8 };
-    
-    handle->threshold.min = threshold->min;
-    handle->threshold.max = threshold->max;
-
-    ESP_LOGE(TAG, "[%s] THRESHOLD ==> min: %d [%02X %02X], max: %d [%02X %02X]", __func__, 
-      threshold->min, data_min[0], data_min[1],
-      threshold->max, data_max[0], data_max[1]
-    );
-
-    /* Write threshold min & max to the Interrupt Threshold Register */
-    ESP_LOGD(TAG, "[%s] -> cmd: 0x%02X", __func__, cmd_min);
-    result = tsl2561_write(handle, &cmd_min, 1);
-    if (result != ESP_OK) {
-      ESP_LOGE(TAG, "[%s] tsl2561_write(cmd_min: 0x%02X) - failed: %d.", __func__, cmd_min, result);
-      return result;
-    }
-    ESP_LOGD(TAG, "[%s] -> data: 0x%02X%02X", __func__, data_min[1], data_min[0]);
-    result = tsl2561_write(handle, data_min, 2);
-    if (result != ESP_OK) {
-      ESP_LOGE(TAG, "[%s] tsl2561_write(data_min: 0x%02X%02X) - failed: %d.", __func__, data_min[0], data_min[1], result);
-      return result;
-    }
-    ESP_LOGD(TAG, "[%s] -> cmd: 0x%02X", __func__, cmd_max);
-    result = tsl2561_write(handle, &cmd_max, 1);
-    if (result != ESP_OK) {
-      ESP_LOGE(TAG, "[%s] tsl2561_write(cmd_max: 0x%02X) - failed: %d.", __func__, cmd_max, result);
-      return result;
-    }
-    ESP_LOGD(TAG, "[%s] -> data: 0x%02X%02X", __func__, data_max[1], data_max[0]);
-    result = tsl2561_write(handle, data_max, 2);
-    if (result != ESP_OK) {
-      ESP_LOGE(TAG, "[%s] tsl2561_write(data_max: 0x%02X%02X) - failed: %d.", __func__, data_max[0], data_max[1], result);
-      return result;
-    }
-  } else {
-    handle->threshold.min = 0;
-    handle->threshold.max = 0;
+    min = threshold->min;
+    max = threshold->max;
   }
+  handle->threshold.min = min;
+  handle->threshold.max = max;
+
+  uint8_t cmd_min = TSL2561_REG_COMMAND | TSL2561_CMD_WORD_PROTOCOL | TSL2561_REG_THRESH_L;
+  uint8_t cmd_max = TSL2561_REG_COMMAND | TSL2561_CMD_WORD_PROTOCOL | TSL2561_REG_THRESH_H;
+  uint8_t data_min[2] = { min & 0x00FF, (min & 0xFF00) >> 8 };
+  uint8_t data_max[2] = { max & 0x00FF, (max & 0xFF00) >> 8 };
+
+  ESP_LOGE(TAG, "[%s] THRESHOLD ==> min: %d [%02X %02X], max: %d [%02X %02X]", __func__,
+           min, data_min[0], data_min[1], max, data_max[0], data_max[1]);
+
+  /* Write threshold min & max to the Interrupt Threshold Register */
+  ESP_LOGD(TAG, "[%s] -> cmd: 0x%02X", __func__, cmd_min);
+  result = tsl2561_write(handle, &cmd_min, 1);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] tsl2561_write(cmd_min: 0x%02X) - failed: %d.", __func__, cmd_min, result);
+    return result;
+  }
+  ESP_LOGD(TAG, "[%s] -> data: 0x%02X%02X", __func__, data_min[1], data_min[0]);
+  result = tsl2561_write(handle, data_min, 2);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] tsl2561_write(data_min: 0x%02X%02X) - failed: %d.", __func__, data_min[0], data_min[1], result);
+    return result;
+  }
+  ESP_LOGD(TAG, "[%s] -> cmd: 0x%02X", __func__, cmd_max);
+  result = tsl2561_write(handle, &cmd_max, 1);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] tsl2561_write(cmd_max: 0x%02X) - failed: %d.", __func__, cmd_max, result);
+    return result;
+  }
+  ESP_LOGD(TAG, "[%s] -> data: 0x%02X%02X", __func__, data_max[1], data_max[0]);
+  result = tsl2561_write(handle, data_max, 2);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] tsl2561_write(data_max: 0x%02X%02X) - failed: %d.", __func__, data_max[0], data_max[1], result);
+    return result;
+  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -696,13 +697,17 @@ static esp_err_t tsl2561_calculateLux(const tsl2561_t handle) {
     return result;
   }
 
-  uint32_t lux = ((channel0 * b) - (channel1 * m));
+  int64_t lux_scaled =
+      ((int64_t)channel0 * (int64_t)b) - ((int64_t)channel1 * (int64_t)m);
+  if (lux_scaled < 0) {
+    lux_scaled = 0;
+  }
 
   // round lsb (2^(LUX_SCALE−1))
-  lux += (1 << (LUX_SCALE - 1));
+  lux_scaled += (1 << (LUX_SCALE - 1));
 
   // strip off fractional portion
-  handle->lux = lux >> LUX_SCALE;
+  handle->lux = (uint32_t)(lux_scaled >> LUX_SCALE);
 
   /* protect against divade by 0 */
   if (handle->broadband != 0) {
@@ -734,7 +739,7 @@ static esp_err_t tsl2561_init(tsl2561_t* const handle_ptr) {
   handle = malloc(sizeof(tsl2561_s));
   if (handle == NULL) {
     ESP_LOGE(TAG, "[%s] Memory allocation problem", __func__);
-    result = ESP_ERR_NO_MEM;
+    return ESP_ERR_NO_MEM;
   }
 
   memset(handle, 0x00, sizeof(tsl2561_s));
@@ -786,6 +791,11 @@ static esp_err_t tsl2561_init(tsl2561_t* const handle_ptr) {
  */
 static esp_err_t tsl2561_done(tsl2561_t handle) {
   esp_err_t result = ESP_OK;
+
+  if (handle == NULL) {
+    ESP_LOGE(TAG, "[%s] handle=NULL", __func__);
+    return ESP_ERR_INVALID_ARG;
+  }
 
   ESP_LOGI(TAG, "++%s(handle: %p)", __func__, handle);
 
