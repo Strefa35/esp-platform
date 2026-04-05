@@ -24,6 +24,12 @@
   _type == MSG_TYPE_ETH_EVENT                 ? "MSG_TYPE_ETH_EVENT"              : \
   _type == MSG_TYPE_ETH_MAC                   ? "MSG_TYPE_ETH_MAC"                : \
   _type == MSG_TYPE_ETH_IP                    ? "MSG_TYPE_ETH_IP"                 : \
+  _type == MSG_TYPE_WIFI_EVENT                ? "MSG_TYPE_WIFI_EVENT"             : \
+  _type == MSG_TYPE_WIFI_IP                   ? "MSG_TYPE_WIFI_IP"                : \
+  _type == MSG_TYPE_WIFI_SCAN_REQ             ? "MSG_TYPE_WIFI_SCAN_REQ"          : \
+  _type == MSG_TYPE_WIFI_SCAN_RESULT          ? "MSG_TYPE_WIFI_SCAN_RESULT"       : \
+  _type == MSG_TYPE_WIFI_CONNECT              ? "MSG_TYPE_WIFI_CONNECT"           : \
+  _type == MSG_TYPE_WIFI_DISCONNECT           ? "MSG_TYPE_WIFI_DISCONNECT"        : \
   _type == MSG_TYPE_MQTT_START                ? "MSG_TYPE_MQTT_START"             : \
   _type == MSG_TYPE_MQTT_STOP                 ? "MSG_TYPE_MQTT_STOP"              : \
   _type == MSG_TYPE_MQTT_EVENT                ? "MSG_TYPE_MQTT_EVENT"             : \
@@ -50,6 +56,15 @@
   _event == DATA_ETH_EVENT_CONNECTED          ? "DATA_ETH_EVENT_CONNECTED"        : \
   _event == DATA_ETH_EVENT_DISCONNECTED       ? "DATA_ETH_EVENT_DISCONNECTED"     : \
                                                 "DATA_ETH_EVENT_UNKNOWN"            \
+)
+
+#define GET_DATA_WIFI_EVENT_NAME(_event) ( \
+  _event == DATA_WIFI_EVENT_STA_START         ? "DATA_WIFI_EVENT_STA_START"       : \
+  _event == DATA_WIFI_EVENT_STA_STOP          ? "DATA_WIFI_EVENT_STA_STOP"        : \
+  _event == DATA_WIFI_EVENT_SCAN_FAILED       ? "DATA_WIFI_EVENT_SCAN_FAILED"     : \
+  _event == DATA_WIFI_EVENT_CONNECTED         ? "DATA_WIFI_EVENT_CONNECTED"       : \
+  _event == DATA_WIFI_EVENT_DISCONNECTED      ? "DATA_WIFI_EVENT_DISCONNECTED"    : \
+                                                "DATA_WIFI_EVENT_UNKNOWN"           \
 )
 
 #define GET_DATA_MQTT_EVENT_NAME(_event) ( \
