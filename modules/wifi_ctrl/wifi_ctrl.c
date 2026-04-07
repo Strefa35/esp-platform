@@ -16,7 +16,6 @@
 
 #include "sdkconfig.h"
 
-#include "esp_check.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -386,58 +385,16 @@ static esp_err_t wifictrl_Enqueue(const msg_t *msg)
 }
 
 /**
- * @brief Initialise Wi-Fi STA driver, netif, event handlers, and the worker task.
+ * @brief Undo partial `WifiCtrl_Init`: task, handlers, Wi-Fi driver, netif, queue, semaphore.
  *
- * Does not call `esp_wifi_start()`; use `WifiCtrl_Run()` after all controllers are initialised.
+ * Safe when only a subset of those objects exists; clears module statics.
  *
- * @return ESP_OK on success; `ESP_ERR_NO_MEM` or driver errors on failure (rolls back partial init).
+ * @param err Error code to return after cleanup.
+ *
+ * @return `err` unchanged.
  */
-esp_err_t WifiCtrl_Init(void)
+static esp_err_t wifictrl_RollbackInit(esp_err_t err)
 {
-  esp_err_t result = ESP_OK;
-
-  ESP_LOGI(TAG, "++%s()", __func__);
-
-  ESP_RETURN_ON_ERROR(wifictrl_EnsureNetifAndEvents(), TAG, "netif/events");
-
-  s_wifi_queue = xQueueCreate(WIFI_MSG_MAX, sizeof(msg_t));
-  ESP_RETURN_ON_FALSE(s_wifi_queue != NULL, ESP_ERR_NO_MEM, TAG, "queue");
-
-  s_wifi_done_sem = xSemaphoreCreateBinary();
-  ESP_RETURN_ON_FALSE(s_wifi_done_sem != NULL, ESP_ERR_NO_MEM, TAG, "sem");
-
-  s_sta_netif = esp_netif_create_default_wifi_sta();
-  ESP_RETURN_ON_FALSE(s_sta_netif != NULL, ESP_FAIL, TAG, "sta netif");
-
-  wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();
-  result = esp_wifi_init(&wcfg);
-  if (result != ESP_OK) {
-    ESP_LOGE(TAG, "esp_wifi_init: %s", esp_err_to_name(result));
-    goto fail;
-  }
-
-  result = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifictrl_OnWifiEvent, NULL);
-  if (result != ESP_OK) {
-    ESP_LOGE(TAG, "WIFI_EVENT register: %s", esp_err_to_name(result));
-    goto fail;
-  }
-  result = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifictrl_OnIpEvent, NULL);
-  if (result != ESP_OK) {
-    ESP_LOGE(TAG, "IP_EVENT register: %s", esp_err_to_name(result));
-    goto fail;
-  }
-
-  BaseType_t ok = xTaskCreate(wifictrl_TaskFn, WIFI_TASK_NAME, WIFI_TASK_STACK_SIZE, NULL, WIFI_TASK_PRIORITY, &s_wifi_task);
-  if (ok != pdPASS) {
-    ESP_LOGE(TAG, "xTaskCreate failed");
-    result = ESP_FAIL;
-    goto fail;
-  }
-
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
-
-fail:
   if (s_wifi_task) {
     vTaskDelete(s_wifi_task);
     s_wifi_task = NULL;
@@ -457,6 +414,71 @@ fail:
     vSemaphoreDelete(s_wifi_done_sem);
     s_wifi_done_sem = NULL;
   }
+  return err;
+}
+
+/**
+ * @brief Initialise Wi-Fi STA driver, netif, event handlers, and the worker task.
+ *
+ * Does not call `esp_wifi_start()`; use `WifiCtrl_Run()` after all controllers are initialised.
+ *
+ * @return ESP_OK on success; `ESP_ERR_NO_MEM` or driver errors on failure (rolls back partial init).
+ */
+esp_err_t WifiCtrl_Init(void)
+{
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  result = wifictrl_EnsureNetifAndEvents();
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "netif/events: %s", esp_err_to_name(result));
+    return result;
+  }
+
+  s_wifi_queue = xQueueCreate(WIFI_MSG_MAX, sizeof(msg_t));
+  if (s_wifi_queue == NULL) {
+    ESP_LOGE(TAG, "queue create failed");
+    return wifictrl_RollbackInit(ESP_ERR_NO_MEM);
+  }
+
+  s_wifi_done_sem = xSemaphoreCreateBinary();
+  if (s_wifi_done_sem == NULL) {
+    ESP_LOGE(TAG, "done semaphore create failed");
+    return wifictrl_RollbackInit(ESP_ERR_NO_MEM);
+  }
+
+  s_sta_netif = esp_netif_create_default_wifi_sta();
+  if (s_sta_netif == NULL) {
+    ESP_LOGE(TAG, "sta netif create failed");
+    return wifictrl_RollbackInit(ESP_FAIL);
+  }
+
+  wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();
+  result = esp_wifi_init(&wcfg);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "esp_wifi_init: %s", esp_err_to_name(result));
+    return wifictrl_RollbackInit(result);
+  }
+
+  result = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifictrl_OnWifiEvent, NULL);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "WIFI_EVENT register: %s", esp_err_to_name(result));
+    return wifictrl_RollbackInit(result);
+  }
+  result = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifictrl_OnIpEvent, NULL);
+  if (result != ESP_OK) {
+    ESP_LOGE(TAG, "IP_EVENT register: %s", esp_err_to_name(result));
+    return wifictrl_RollbackInit(result);
+  }
+
+  BaseType_t ok = xTaskCreate(wifictrl_TaskFn, WIFI_TASK_NAME, WIFI_TASK_STACK_SIZE, NULL, WIFI_TASK_PRIORITY, &s_wifi_task);
+  if (ok != pdPASS) {
+    ESP_LOGE(TAG, "xTaskCreate failed");
+    return wifictrl_RollbackInit(ESP_FAIL);
+  }
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
