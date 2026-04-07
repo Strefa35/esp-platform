@@ -57,7 +57,7 @@ static TaskHandle_t       mgr_task_id = NULL;
 static SemaphoreHandle_t  mgr_sem_id = NULL;
 
 static data_eth_mac_t     mgr_eth_mac = {};
-static data_eth_info_t    mgr_eth_info = {};
+static data_ip_info_t     mgr_eth_info = {};
 
 
 static char mgr_reg_pub_pattern[] = "REGISTER/ESP/%02X%02X%02X";

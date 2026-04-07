@@ -40,6 +40,11 @@
 #define WIFI_TASK_PRIORITY      11
 
 #define WIFI_MSG_MAX            8
+
+/** Max time to wait for a slot to post `MSG_TYPE_DONE` during shutdown (worker must drain the queue). */
+#define WIFI_CTRL_SHUTDOWN_QUEUE_TIMEOUT_MS 60000U
+/** Max time to wait for the worker to exit after `MSG_TYPE_DONE` is queued. */
+#define WIFI_CTRL_SHUTDOWN_SEM_TIMEOUT_MS   10000U
 /** @} */
 
 static const char *TAG = "ESP::WIFI";
@@ -252,6 +257,8 @@ static esp_err_t wifictrl_DoScan(void)
  * @brief Apply STA credentials and start association.
  *
  * @param c Connection parameters (`ssid`, `password`, optional `channel`, `authmode` as `wifi_auth_mode_t`).
+ *          SSID and password may be up to 32 and 64 octets respectively (`wifi_sta_config_t`); they need not be
+ *          NUL-terminated when using the full length.
  *
  * @return ESP_OK if association was requested; `ESP_ERR_INVALID_ARG` for bad lengths; driver errors otherwise.
  */
@@ -264,13 +271,13 @@ static esp_err_t wifictrl_DoConnect(const data_wifi_connect_t *c)
   wifi_config_t cfg;
   memset(&cfg, 0, sizeof(cfg));
 
-  size_t ssid_len = strnlen(c->ssid, sizeof(c->ssid));
-  size_t pass_len = strnlen(c->password, sizeof(c->password));
-  if (ssid_len == 0U || ssid_len >= sizeof(cfg.sta.ssid)) {
+  size_t ssid_len = strnlen(c->ssid, sizeof(cfg.sta.ssid));
+  size_t pass_len = strnlen(c->password, sizeof(cfg.sta.password));
+  if (ssid_len == 0U || ssid_len > sizeof(cfg.sta.ssid)) {
     ESP_LOGE(TAG, "Invalid SSID length");
     return ESP_ERR_INVALID_ARG;
   }
-  if (pass_len >= sizeof(cfg.sta.password)) {
+  if (pass_len > sizeof(cfg.sta.password)) {
     ESP_LOGE(TAG, "Invalid password length");
     return ESP_ERR_INVALID_ARG;
   }
@@ -428,6 +435,8 @@ esp_err_t WifiCtrl_Init(void)
 {
   esp_err_t result = ESP_OK;
 
+  esp_log_level_set(TAG, CONFIG_WIFI_CTRL_LOG_LEVEL);
+
   ESP_LOGI(TAG, "++%s()", __func__);
 
   result = wifictrl_EnsureNetifAndEvents();
@@ -502,14 +511,30 @@ esp_err_t WifiCtrl_Done(void)
       .from = REG_WIFI_CTRL,
       .to = REG_WIFI_CTRL,
     };
-    if (wifictrl_Enqueue(&msg) == ESP_OK && s_wifi_done_sem != NULL) {
-      xSemaphoreTake(s_wifi_done_sem, portMAX_DELAY);
+
+    bool worker_stopped =
+        (xQueueSend(s_wifi_queue, &msg, pdMS_TO_TICKS(WIFI_CTRL_SHUTDOWN_QUEUE_TIMEOUT_MS)) == pdPASS);
+    if (worker_stopped && s_wifi_done_sem != NULL) {
+      worker_stopped =
+          (xSemaphoreTake(s_wifi_done_sem, pdMS_TO_TICKS(WIFI_CTRL_SHUTDOWN_SEM_TIMEOUT_MS)) == pdTRUE);
+    } else if (worker_stopped) {
+      worker_stopped = false;
     }
+
+    if (!worker_stopped) {
+      ESP_LOGE(TAG, "shutdown: worker did not stop cleanly, deleting task");
+      if (s_wifi_task != NULL) {
+        vTaskDelete(s_wifi_task);
+        vTaskDelay(pdMS_TO_TICKS(1));
+      }
+    }
+
+    s_wifi_task = NULL;
     vQueueDelete(s_wifi_queue);
     s_wifi_queue = NULL;
+  } else {
+    s_wifi_task = NULL;
   }
-
-  s_wifi_task = NULL;
 
   (void)esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifictrl_OnIpEvent);
   (void)esp_event_handler_unregister(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifictrl_OnWifiEvent);

@@ -175,21 +175,26 @@ typedef struct {
 /* ETH MAC definition */
 typedef uint8_t data_eth_mac_t[6];
 
-/* ETH IP definition */
+/* IPv4 configuration (ip / mask / gw as raw u32, same layout as esp_netif_ip_info_t .addr fields) */
 typedef struct {
   uint32_t  ip;
   uint32_t  mask;
   uint32_t  gw;
-} data_eth_info_t;
+} data_ip_info_t;
 
 /* ETH message payload */
 typedef struct {
   union {
     data_eth_event_e  event_id;
     data_eth_mac_t    mac;
-    data_eth_info_t   info;
+    data_ip_info_t    info;
   } u;
 } payload_eth_t;
+
+/* WiFi scan result (number of APs found) */
+typedef struct {
+  uint16_t ap_count;
+} data_wifi_scan_t;
 
 /* WiFi STA credentials and connection parameters (for MSG_TYPE_WIFI_CONNECT) */
 typedef struct {
@@ -203,10 +208,8 @@ typedef struct {
 typedef struct {
   union {
     data_wifi_event_e   event_id;
-    data_eth_info_t     ip_info;
-    struct {
-      uint16_t ap_count;
-    } scan;
+    data_ip_info_t      ip_info;
+    data_wifi_scan_t    scan;
     data_wifi_connect_t connect;
   } u;
 } payload_wifi_t;
