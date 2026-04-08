@@ -34,9 +34,12 @@
 
 #define MGR_MSG_MAX             40
 
-#define GET_ETH_MAC(_mac)       _mac[0], _mac[1], _mac[2], _mac[3], _mac[4], _mac[5]
+#define GET_ETH_MAC(_mac)       (_mac)[0], (_mac)[1], (_mac)[2], (_mac)[3], (_mac)[4], (_mac)[5]
+/** Use when argument is data_eth_mac_t* (not the array itself); mac[0] would be the whole 6-byte row. */
+#define GET_ETH_MAC_PTR(_ptr)   (*(_ptr))[0], (*(_ptr))[1], (*(_ptr))[2], (*(_ptr))[3], (*(_ptr))[4], (*(_ptr))[5]
 
-#define MGR_TOPIC_MAX_LEN       (20U)
+/* Must fit "%s/req/%s" with mgr_uid (10) + longest module name + NUL; same as MQTT topic buffers */
+#define MGR_TOPIC_MAX_LEN       (DATA_TOPIC_SIZE)
 
 #define MGR_UID_LEN             (10U)  // ESP/12AB34
 #define MGR_MAC_LEN             (17U)  // 12:34:56:78:90:AB
@@ -276,7 +279,8 @@ void mgr_SubscribeTopic(void) {
     /* Subscribe every registered module */
     for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
       mgr_topic_list[idx].type = mgr_reg_list[idx].type;
-      snprintf(mgr_topic_list[idx].topic, DATA_TOPIC_SIZE, mgr_topic_pattern, mgr_uid, mgr_reg_list[idx].name);
+      snprintf(mgr_topic_list[idx].topic, sizeof(mgr_topic_list[idx].topic), mgr_topic_pattern, mgr_uid,
+               mgr_reg_list[idx].name);
       snprintf(msg.payload.mqtt.u.topic, DATA_TOPIC_SIZE, "%s", mgr_topic_list[idx].topic);
       esp_err_t result = mgr_send_to_mqtt_fn(&msg);
       if (result != ESP_OK) {
@@ -315,7 +319,8 @@ void mgr_SubscribeList(void) {
       if (topics) {
         for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
           mgr_topic_list[idx].type = mgr_reg_list[idx].type;
-          snprintf(mgr_topic_list[idx].topic, DATA_TOPIC_SIZE, mgr_topic_pattern, mgr_uid, mgr_reg_list[idx].name);
+          snprintf(mgr_topic_list[idx].topic, sizeof(mgr_topic_list[idx].topic), mgr_topic_pattern, mgr_uid,
+                   mgr_reg_list[idx].name);
           cJSON_AddItemToArray(topics, cJSON_CreateString(mgr_topic_list[idx].topic));
         }
       }
@@ -513,7 +518,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
 
       /* Store MAC address */
       //memcpy(mgr_eth_mac, mac_ptr, sizeof(data_eth_mac_t)); // Now taken during initialization
-      ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mac_ptr));
+      ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC_PTR(mac_ptr));
 
       mgr_CreateUid();
 

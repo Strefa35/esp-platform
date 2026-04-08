@@ -7,6 +7,10 @@ set(SOURCE_LIST
   cli_ctrl.c
 )
 
+if(CONFIG_WIFI_CTRL_ENABLE)
+  list(APPEND SOURCE_LIST cli_wifi.c)
+endif()
+
 #####################################
 #### INCLUDE_LIST
 #####################################
@@ -24,6 +28,7 @@ set(REQUIRE_LIST
 #### PRIV_REQUIRE_LIST
 #####################################
 set(PRIV_REQUIRE_LIST 
+  console
 )
 
 #####################################
