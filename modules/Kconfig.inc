@@ -1,4 +1,5 @@
 orsource "eth_ctrl/Kconfig.inc"
+orsource "wifi_ctrl/Kconfig.inc"
 orsource "mqtt_ctrl/Kconfig.inc"
 orsource "cfg_ctrl/Kconfig.inc"
 orsource "cli_ctrl/Kconfig.inc"

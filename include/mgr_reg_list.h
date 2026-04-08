@@ -18,6 +18,10 @@
   #include "eth_ctrl.h"
 #endif
 
+#ifdef CONFIG_WIFI_CTRL_ENABLE
+  #include "wifi_ctrl.h"
+#endif
+
 #ifdef CONFIG_GPIO_CTRL_ENABLE
   #include "gpio_ctrl.h"
 #endif
@@ -72,6 +76,18 @@ static mgr_reg_t mgr_reg_list[] = {
     .done_fn  = EthCtrl_Done,
     .run_fn   = EthCtrl_Run,
     .send_fn  = EthCtrl_Send,
+    .get_fn   = NULL,
+  },
+#endif
+
+#ifdef CONFIG_WIFI_CTRL_ENABLE
+  {
+    .name     = "wifi",
+    .type     = REG_WIFI_CTRL,
+    .init_fn  = WifiCtrl_Init,
+    .done_fn  = WifiCtrl_Done,
+    .run_fn   = WifiCtrl_Run,
+    .send_fn  = WifiCtrl_Send,
     .get_fn   = NULL,
   },
 #endif

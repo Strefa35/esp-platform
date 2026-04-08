@@ -138,7 +138,7 @@ static esp_err_t publishResponse(cJSON* response, msg_t* msg) {
   ESP_LOGI(TAG, "++%s(response: %p, msg: %p)", __func__, response, msg);
   if ((ret = cJSON_PrintPreallocated(response, msg->payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0)) == 1) {
     /* add topic -> ESP/12AB34/res/sensor */
-    snprintf(msg->payload.mqtt.u.data.topic, DATA_MSG_SIZE, "%s/res/sensor", esp_uid);
+    snprintf(msg->payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/res/sensor", esp_uid);
 
     result = MGR_Send(msg);
     if (result != ESP_OK) {

@@ -29,6 +29,12 @@ The above boards have their configurations available in sdkconfig.defaults files
 - sdkconfig.defaults.esp32s3.debug
 - sdkconfig.defaults.esp32s2.debug
 
+### Partition table (ESP32)
+
+The ESP32 build uses a **custom partition table** from [`config/partitions-esp32.csv`](config/partitions-esp32.csv). It is selected via `CONFIG_PARTITION_TABLE_CUSTOM=y` and `CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="config/partitions-esp32.csv"` in `sdkconfig.defaults` (and `sdkconfig` after configuration). If you rename the CSV file or add per-target tables, update those Kconfig options or set **Partition Table → Custom partition CSV file** in `idf.py menuconfig`.
+
+Set **Serial flasher config → Flash size** to match your module (e.g. **4 MB** on [ESP32-EVB](https://www.olimex.com/Products/IoT/ESP32/ESP32-EVB/open-source-hardware)). The partition layout must fit within that size.
+
 ## List of supported targets
 `idf.py --list-targets`
 

@@ -1,15 +1,11 @@
-message(STATUS "=========| MODULES | CLI_CTRL |==================================")
+message(STATUS "=========| MODULES | WIFI_CTRL |==================================")
 
 #####################################
 #### SOURCE_LIST
 #####################################
 set(SOURCE_LIST
-  cli_ctrl.c
+  wifi_ctrl.c
 )
-
-if(CONFIG_WIFI_CTRL_ENABLE)
-  list(APPEND SOURCE_LIST cli_wifi.c)
-endif()
 
 #####################################
 #### INCLUDE_LIST
@@ -27,8 +23,8 @@ set(REQUIRE_LIST
 #####################################
 #### PRIV_REQUIRE_LIST
 #####################################
-set(PRIV_REQUIRE_LIST 
-  console
+set(PRIV_REQUIRE_LIST
+  esp_wifi esp_netif esp_event nvs_flash
 )
 
 #####################################

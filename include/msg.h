@@ -35,6 +35,14 @@ typedef enum {
   MSG_TYPE_ETH_MAC,
   MSG_TYPE_ETH_IP,
 
+  /* WiFi module */
+  MSG_TYPE_WIFI_EVENT,
+  MSG_TYPE_WIFI_IP,
+  MSG_TYPE_WIFI_SCAN_REQ,
+  MSG_TYPE_WIFI_SCAN_RESULT,
+  MSG_TYPE_WIFI_CONNECT,
+  MSG_TYPE_WIFI_DISCONNECT,
+
   /* MQTT module */
   MSG_TYPE_MQTT_START,
   MSG_TYPE_MQTT_STOP,
@@ -59,6 +67,15 @@ typedef enum {
   DATA_ETH_EVENT_CONNECTED,
   DATA_ETH_EVENT_DISCONNECTED,
 } data_eth_event_e;
+
+/* WiFi state definition (application-level, sent to the manager) */
+typedef enum {
+  DATA_WIFI_EVENT_STA_START,
+  DATA_WIFI_EVENT_STA_STOP,
+  DATA_WIFI_EVENT_SCAN_FAILED,
+  DATA_WIFI_EVENT_CONNECTED,
+  DATA_WIFI_EVENT_DISCONNECTED,
+} data_wifi_event_e;
 
 /* MQTT state definition */
 typedef enum {
@@ -89,7 +106,7 @@ typedef enum {
 #define REG_MGR_CTRL      (1 << 0)
 #define REG_ETH_CTRL      (1 << 1)
 #define REG_MQTT_CTRL     (1 << 2)
-//#define REG_XXX_CTRL      (1 << 3)
+#define REG_WIFI_CTRL     (1 << 3)
 //#define REG_XXX_CTRL      (1 << 4)
 //#define REG_XXX_CTRL      (1 << 5)
 //#define REG_XXX_CTRL      (1 << 6)
@@ -142,6 +159,9 @@ typedef enum {
 #define DATA_MSG_SIZE       (350U)
 #define DATA_JSON_SIZE      (350U)
 
+#define DATA_WIFI_SSID_SIZE     (33U)
+#define DATA_WIFI_PASSWORD_SIZE (65U)
+
 
 typedef char data_uid_t[DATA_UID_SIZE];
 typedef char data_topic_t[DATA_TOPIC_SIZE];
@@ -155,21 +175,44 @@ typedef struct {
 /* ETH MAC definition */
 typedef uint8_t data_eth_mac_t[6];
 
-/* ETH IP definition */
+/* IPv4 configuration (ip / mask / gw as raw u32, same layout as esp_netif_ip_info_t .addr fields) */
 typedef struct {
   uint32_t  ip;
   uint32_t  mask;
   uint32_t  gw;
-} data_eth_info_t;
+} data_ip_info_t;
 
 /* ETH message payload */
 typedef struct {
   union {
     data_eth_event_e  event_id;
     data_eth_mac_t    mac;
-    data_eth_info_t   info;
+    data_ip_info_t    info;
   } u;
 } payload_eth_t;
+
+/* WiFi scan result (number of APs found) */
+typedef struct {
+  uint16_t ap_count;
+} data_wifi_scan_t;
+
+/* WiFi STA credentials and connection parameters (for MSG_TYPE_WIFI_CONNECT) */
+typedef struct {
+  char     ssid[DATA_WIFI_SSID_SIZE];
+  char     password[DATA_WIFI_PASSWORD_SIZE];
+  uint8_t  channel;
+  uint8_t  authmode;
+} data_wifi_connect_t;
+
+/* WiFi message payload */
+typedef struct {
+  union {
+    data_wifi_event_e   event_id;
+    data_ip_info_t      ip_info;
+    data_wifi_scan_t    scan;
+    data_wifi_connect_t connect;
+  } u;
+} payload_wifi_t;
 
 /* CLI message payload */
 typedef struct {
@@ -218,6 +261,7 @@ typedef struct {
   union {
     payload_mgr_t     mgr;
     payload_eth_t     eth;
+    payload_wifi_t    wifi;
     payload_cli_t     cli;
     payload_gpio_t    gpio;
     payload_power_t   power;

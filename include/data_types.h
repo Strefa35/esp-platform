@@ -21,5 +21,6 @@
 
 #include "data.h"
 
+#include "data_wifi.h"
 
 #endif /* __DATA_TYPES_H__ */
