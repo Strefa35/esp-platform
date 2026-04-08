@@ -28,16 +28,18 @@
 #include "err.h"
 #include "lut.h"
 
-
 #define MGR_TASK_NAME           "mgr-task"
 #define MGR_TASK_STACK_SIZE     4096
 #define MGR_TASK_PRIORITY       8
 
 #define MGR_MSG_MAX             40
 
-#define GET_ETH_MAC(_mac)       _mac[0], _mac[1], _mac[2], _mac[3], _mac[4], _mac[5]
+#define GET_ETH_MAC(_mac)       (_mac)[0], (_mac)[1], (_mac)[2], (_mac)[3], (_mac)[4], (_mac)[5]
+/** Use when argument is data_eth_mac_t* (not the array itself); mac[0] would be the whole 6-byte row. */
+#define GET_ETH_MAC_PTR(_ptr)   (*(_ptr))[0], (*(_ptr))[1], (*(_ptr))[2], (*(_ptr))[3], (*(_ptr))[4], (*(_ptr))[5]
 
-#define MGR_TOPIC_MAX_LEN       (20U)
+/* Must fit "%s/req/%s" with mgr_uid (10) + longest module name + NUL; same as MQTT topic buffers */
+#define MGR_TOPIC_MAX_LEN       (DATA_TOPIC_SIZE)
 
 #define MGR_UID_LEN             (10U)  // ESP/12AB34
 #define MGR_MAC_LEN             (17U)  // 12:34:56:78:90:AB
@@ -58,7 +60,7 @@ static TaskHandle_t       mgr_task_id = NULL;
 static SemaphoreHandle_t  mgr_sem_id = NULL;
 
 static data_eth_mac_t     mgr_eth_mac = {};
-static data_eth_info_t    mgr_eth_info = {};
+static data_ip_info_t     mgr_eth_info = {};
 
 
 static char mgr_reg_pub_pattern[] = "REGISTER/ESP/%02X%02X%02X";
@@ -277,7 +279,8 @@ void mgr_SubscribeTopic(void) {
     /* Subscribe every registered module */
     for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
       mgr_topic_list[idx].type = mgr_reg_list[idx].type;
-      snprintf(mgr_topic_list[idx].topic, DATA_TOPIC_SIZE, mgr_topic_pattern, mgr_uid, mgr_reg_list[idx].name);
+      snprintf(mgr_topic_list[idx].topic, sizeof(mgr_topic_list[idx].topic), mgr_topic_pattern, mgr_uid,
+               mgr_reg_list[idx].name);
       snprintf(msg.payload.mqtt.u.topic, DATA_TOPIC_SIZE, "%s", mgr_topic_list[idx].topic);
       esp_err_t result = mgr_send_to_mqtt_fn(&msg);
       if (result != ESP_OK) {
@@ -316,7 +319,8 @@ void mgr_SubscribeList(void) {
       if (topics) {
         for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
           mgr_topic_list[idx].type = mgr_reg_list[idx].type;
-          snprintf(mgr_topic_list[idx].topic, DATA_TOPIC_SIZE, mgr_topic_pattern, mgr_uid, mgr_reg_list[idx].name);
+          snprintf(mgr_topic_list[idx].topic, sizeof(mgr_topic_list[idx].topic), mgr_topic_pattern, mgr_uid,
+                   mgr_reg_list[idx].name);
           cJSON_AddItemToArray(topics, cJSON_CreateString(mgr_topic_list[idx].topic));
         }
       }
@@ -514,7 +518,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
 
       /* Store MAC address */
       //memcpy(mgr_eth_mac, mac_ptr, sizeof(data_eth_mac_t)); // Now taken during initialization
-      ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC(mac_ptr));
+      ESP_LOGD(TAG, "[%s] MAC: %02X:%02X:%02X:%02X:%02X:%02X", __func__, GET_ETH_MAC_PTR(mac_ptr));
 
       mgr_CreateUid();
 
@@ -747,4 +751,31 @@ esp_err_t MGR_Send(const msg_t* msg) {
   result = mgr_Send(msg);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
+}
+
+esp_err_t MGR_GetData(uint32_t module_type, data_type_e data_type, mgr_reg_data_cb_f cb, void *cb_ctx)
+{
+  ESP_LOGI(TAG, "++%s(module_type: 0x%08x, data_type: %d [%s])", __func__, module_type, data_type, GET_DATA_TYPE_NAME(data_type));
+  if (cb == NULL) {
+    return ESP_ERR_INVALID_ARG;
+  }
+  if ((module_type == 0U) || (module_type & (module_type - 1U)) != 0U) {
+    ESP_LOGI(TAG, "[%s] Invalid module type: %d", __func__, module_type);
+    return ESP_ERR_INVALID_ARG;
+  }
+
+  /* Hot path cost is almost always inside get_fn; this loop is tiny (MGR_REG_LIST_CNT). */
+  for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
+    if ((mgr_reg_list[idx].type & module_type) == 0U) {
+      continue;
+    }
+    if (mgr_reg_list[idx].get_fn == NULL) {
+      ESP_LOGI(TAG, "[%s] get_fn() is NULL for module: '%s'", __func__, mgr_reg_list[idx].name);
+      return ESP_ERR_NOT_SUPPORTED;
+    }
+    ESP_LOGI(TAG, "[%s] Call get_fn() for module: '%s'", __func__, mgr_reg_list[idx].name);
+    return mgr_reg_list[idx].get_fn(data_type, cb, cb_ctx);
+  }
+  ESP_LOGI(TAG, "--%s() - result: ESP_ERR_NOT_FOUND", __func__);
+  return ESP_ERR_NOT_FOUND;
 }

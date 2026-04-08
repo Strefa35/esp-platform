@@ -1,13 +1,14 @@
 /**
  * @file mgr_reg_list.h
  * @author A.Czerwinski@pistacje.net
- * @brief 
+ * @brief
  * @version 0.1
  * @date 2025-01-30
- * 
+ *
  * @copyright Copyright (c) 2025 4Embedded.Systems
- * 
+ *
  */
+
 #ifndef __MGR_REG_LIST_H__
 #define __MGR_REG_LIST_H__
 
@@ -15,6 +16,10 @@
 
 #ifdef CONFIG_ETH_CTRL_ENABLE
   #include "eth_ctrl.h"
+#endif
+
+#ifdef CONFIG_WIFI_CTRL_ENABLE
+  #include "wifi_ctrl.h"
 #endif
 
 #ifdef CONFIG_GPIO_CTRL_ENABLE
@@ -65,79 +70,146 @@ static mgr_reg_t mgr_reg_list[] = {
   /* ETH Controller MUST BE first element in mgr_reg_list */
 #ifdef CONFIG_ETH_CTRL_ENABLE
   {
-    "eth", REG_ETH_CTRL,
-    EthCtrl_Init, EthCtrl_Done, EthCtrl_Run, EthCtrl_Send
+    .name     = "eth",
+    .type     = REG_ETH_CTRL,
+    .init_fn  = EthCtrl_Init,
+    .done_fn  = EthCtrl_Done,
+    .run_fn   = EthCtrl_Run,
+    .send_fn  = EthCtrl_Send,
+    .get_fn   = NULL,
+  },
+#endif
+
+#ifdef CONFIG_WIFI_CTRL_ENABLE
+  {
+    .name     = "wifi",
+    .type     = REG_WIFI_CTRL,
+    .init_fn  = WifiCtrl_Init,
+    .done_fn  = WifiCtrl_Done,
+    .run_fn   = WifiCtrl_Run,
+    .send_fn  = WifiCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_GPIO_CTRL_ENABLE
   {
-    "gpio", REG_GPIO_CTRL,
-    GpioCtrl_Init, GpioCtrl_Done, GpioCtrl_Run, GpioCtrl_Send
+    .name     = "gpio",
+    .type     = REG_GPIO_CTRL,
+    .init_fn  = GpioCtrl_Init,
+    .done_fn  = GpioCtrl_Done,
+    .run_fn   = GpioCtrl_Run,
+    .send_fn  = GpioCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_POWER_CTRL_ENABLE
   {
-    "power", REG_POWER_CTRL,
-    PowerCtrl_Init, PowerCtrl_Done, PowerCtrl_Run, PowerCtrl_Send
+    .name     = "power",
+    .type     = REG_POWER_CTRL,
+    .init_fn  = PowerCtrl_Init,
+    .done_fn  = PowerCtrl_Done,
+    .run_fn   = PowerCtrl_Run,
+    .send_fn  = PowerCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_RELAY_CTRL_ENABLE
   {
-    "relay", REG_RELAY_CTRL,
-    RelayCtrl_Init, RelayCtrl_Done, RelayCtrl_Run, RelayCtrl_Send
+    .name     = "relay",
+    .type     = REG_RELAY_CTRL,
+    .init_fn  = RelayCtrl_Init,
+    .done_fn  = RelayCtrl_Done,
+    .run_fn   = RelayCtrl_Run,
+    .send_fn  = RelayCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_LCD_CTRL_ENABLE
   {
-    "lcd", REG_LCD_CTRL,
-    LcdCtrl_Init, LcdCtrl_Done, LcdCtrl_Run, LcdCtrl_Send
+    .name     = "lcd",
+    .type     = REG_LCD_CTRL,
+    .init_fn  = LcdCtrl_Init,
+    .done_fn  = LcdCtrl_Done,
+    .run_fn   = LcdCtrl_Run,
+    .send_fn  = LcdCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_CFG_CTRL_ENABLE
   {
-    "cfg", REG_CFG_CTRL,
-    CfgCtrl_Init, CfgCtrl_Done, CfgCtrl_Run, CfgCtrl_Send
+    .name     = "cfg",
+    .type     = REG_CFG_CTRL,
+    .init_fn  = CfgCtrl_Init,
+    .done_fn  = CfgCtrl_Done,
+    .run_fn   = CfgCtrl_Run,
+    .send_fn  = CfgCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_SYS_CTRL_ENABLE
   {
-    "sys", REG_SYS_CTRL,
-    SysCtrl_Init, SysCtrl_Done, SysCtrl_Run, SysCtrl_Send
+    .name     = "sys",
+    .type     = REG_SYS_CTRL,
+    .init_fn  = SysCtrl_Init,
+    .done_fn  = SysCtrl_Done,
+    .run_fn   = SysCtrl_Run,
+    .send_fn  = SysCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_CLI_CTRL_ENABLE
   {
-    "cli", REG_CLI_CTRL,
-    CliCtrl_Init, CliCtrl_Done, CliCtrl_Run, CliCtrl_Send
+    .name     = "cli",
+    .type     = REG_CLI_CTRL,
+    .init_fn  = CliCtrl_Init,
+    .done_fn  = CliCtrl_Done,
+    .run_fn   = CliCtrl_Run,
+    .send_fn  = CliCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_SENSOR_CTRL_ENABLE
   {
-    "sensor", REG_SENSOR_CTRL,
-    SensorCtrl_Init, SensorCtrl_Done, SensorCtrl_Run, SensorCtrl_Send
+    .name     = "sensor",
+    .type     = REG_SENSOR_CTRL,
+    .init_fn  = SensorCtrl_Init,
+    .done_fn  = SensorCtrl_Done,
+    .run_fn   = SensorCtrl_Run,
+    .send_fn  = SensorCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_TEMPLATE_CTRL_ENABLE
   {
-    "template", REG_XXX_CTRL,
-    TemplateCtrl_Init, TemplateCtrl_Done, TemplateCtrl_Run, TemplateCtrl_Send
+    .name     = "template",
+    .type     = REG_XXX_CTRL,
+    .init_fn  = TemplateCtrl_Init,
+    .done_fn  = TemplateCtrl_Done,
+    .run_fn   = TemplateCtrl_Run,
+    .send_fn  = TemplateCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 
 #ifdef CONFIG_MQTT_CTRL_ENABLE
   /* MQTT Controller MUST BE last element in mgr_reg_list */
   {
-    "mqtt", REG_MQTT_CTRL | REG_INT_CTRL,
-    MqttCtrl_Init, MqttCtrl_Done, MqttCtrl_Run, MqttCtrl_Send
+    .name     = "mqtt",
+    .type     = REG_MQTT_CTRL | REG_INT_CTRL,
+    .init_fn  = MqttCtrl_Init,
+    .done_fn  = MqttCtrl_Done,
+    .run_fn   = MqttCtrl_Run,
+    .send_fn  = MqttCtrl_Send,
+    .get_fn   = NULL,
   },
 #endif
 };

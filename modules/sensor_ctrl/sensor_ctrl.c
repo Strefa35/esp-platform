@@ -59,9 +59,14 @@ static esp_err_t sensorCb(cJSON* data, void* param) {
       .to = REG_MQTT_CTRL,
     };
     uint32_t idx = (uint32_t) param;
+    const size_t sensor_count = SENSOR_LIST_CNT;
 
-    if (idx >= SENSOR_LIST_CNT) {
-      ESP_LOGW(TAG, "[%s] Passed param: %ld is wrong", __func__, idx);
+    if (sensor_count == 0) {
+      ESP_LOGW(TAG, "[%s] No sensors configured", __func__);
+      return result;
+    }
+    if (idx >= sensor_count) {
+      ESP_LOGW(TAG, "[%s] Passed param: %lu is wrong", __func__, (unsigned long) idx);
       return result;
     }
 
@@ -99,7 +104,7 @@ static esp_err_t initSensors(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
-  for (uint32_t idx = 0; idx < SENSOR_LIST_CNT; ++idx) {
+  for (size_t idx = 0; idx != SENSOR_LIST_CNT; ++idx) {
     if (sensor_list[idx].init) {
       result = sensor_list[idx].init(sensorCb, (void*) idx);
       if (result != ESP_OK) {
@@ -115,7 +120,7 @@ static sensor_reg_t* findSensor(const char* name) {
   sensor_reg_t* sensor_slot_ptr = NULL;
 
   ESP_LOGI(TAG, "++%s(name: '%s')", __func__, name);
-  for (int idx = 0; idx < SENSOR_LIST_CNT; ++idx) {
+  for (size_t idx = 0; idx != SENSOR_LIST_CNT; ++idx) {
     if (strcmp(sensor_list[idx].name, name) == 0) {
       ESP_LOGD(TAG, "[%s] Sensor '%s' has been found.", __func__, name);
       sensor_slot_ptr = &sensor_list[idx];
@@ -133,7 +138,7 @@ static esp_err_t publishResponse(cJSON* response, msg_t* msg) {
   ESP_LOGI(TAG, "++%s(response: %p, msg: %p)", __func__, response, msg);
   if ((ret = cJSON_PrintPreallocated(response, msg->payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0)) == 1) {
     /* add topic -> ESP/12AB34/res/sensor */
-    snprintf(msg->payload.mqtt.u.data.topic, DATA_MSG_SIZE, "%s/res/sensor", esp_uid);
+    snprintf(msg->payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/res/sensor", esp_uid);
 
     result = MGR_Send(msg);
     if (result != ESP_OK) {

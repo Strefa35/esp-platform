@@ -44,4 +44,25 @@ menu "CLI Controller"
         default 4 if CLI_CTRL_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if CLI_CTRL_LOG_DEFAULT_LEVEL_VERBOSE
 
+    config CLI_CTRL_REPL_STACK_SIZE
+        int "REPL FreeRTOS stack size (bytes)"
+        depends on CLI_CTRL_ENABLE
+        default 8192
+        help
+            Stack for the console REPL task created by esp_console (linenoise, printf).
+
+    config CLI_CTRL_REPL_TASK_PRIORITY
+        int "REPL task priority"
+        depends on CLI_CTRL_ENABLE
+        default 2
+        help
+            FreeRTOS priority for the REPL reader task (ESP-IDF default in REPL config is 2).
+
+    config CLI_CTRL_PROMPT_STRING
+        string "Console prompt"
+        depends on CLI_CTRL_ENABLE
+        default "esp> "
+        help
+            Prompt string printed before each command line (e.g. esp> ).
+
 endmenu
