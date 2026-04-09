@@ -31,7 +31,7 @@ Or analyze a capture after the fact:
 python3 scripts/parse_mem_log.py monitor.log > heap-report.md
 ```
 
-Use `-` or omit the file argument when piping; the default input is **stdin** when you pass `-` explicitly (see `python3 scripts/parse_mem_log.py --help`).
+When piping, pass `-` or omit the file argument entirely: both read from **stdin** (the positional argument defaults to `-`). See `python3 scripts/parse_mem_log.py --help`.
 
 ## What the script extracts
 

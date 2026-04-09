@@ -25,11 +25,14 @@
  * @brief Initialize the memory diagnostics module (call once from `app_main`).
  *
  * @param[in] start_periodic_monitor If true, starts the background task that
- *            logs heap lines periodically (requires the periodic monitor options
- *            in menuconfig). If false, returns `ESP_OK` without creating that task.
+ *            logs heap lines periodically (requires `CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE`
+ *            so `CONFIG_MAIN_MEMORY_MONITOR_*` are defined). If false, returns `ESP_OK`
+ *            without creating that task.
  *
  * @return `ESP_OK` on success or when the periodic task is not requested;
- *         `ESP_FAIL` if the monitor task could not be created.
+ *         `ESP_FAIL` if the monitor task could not be created;
+ *         `ESP_ERR_NOT_SUPPORTED` if @p start_periodic_monitor is true but the periodic
+ *         monitor was not enabled in Kconfig (implementation omitted).
  */
 esp_err_t mem_Init(bool start_periodic_monitor);
 

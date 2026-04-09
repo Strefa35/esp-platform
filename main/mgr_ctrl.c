@@ -709,7 +709,10 @@ esp_err_t MGR_Done(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
   MEM_CHECK(mem_LogSnapshot(__func__, "mgr_done_begin"));
   for (int idx = mgr_modules_cnt - 1; idx >= 0; --idx) {
-    result = mgr_Done(idx);
+    esp_err_t r = mgr_Done(idx);
+    if (r != ESP_OK && result == ESP_OK) {
+      result = r;
+    }
     MEM_CHECK(mem_LogSnapshot(__func__, "mgr_done_module_done: %s", mgr_reg_list[idx].name));
   }
   if (mgr_task_id) {
@@ -740,7 +743,10 @@ esp_err_t MGR_Run(void) {
   MEM_CHECK(mem_LogSnapshot(__func__, "mgr_run_begin"));
 
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-    result = mgr_Run(idx);
+    esp_err_t r = mgr_Run(idx);
+    if (r != ESP_OK && result == ESP_OK) {
+      result = r;
+    }
     MEM_CHECK(mem_LogSnapshot(__func__, "mgr_run_module_done: %s", mgr_reg_list[idx].name));
   }
 

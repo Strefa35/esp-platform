@@ -4,8 +4,9 @@
  *
  * @details
  * Built only when `CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE` is set. Samples heap
- * via ESP-IDF heap APIs, formats one log line per call, and optionally runs
- * a FreeRTOS task for periodic logging when `mem_Init(true)` is used.
+ * via ESP-IDF heap APIs, formats one log line per call, and runs a FreeRTOS
+ * periodic monitor task when `CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE` is set
+ * and `mem_Init(true)` is used.
  */
 
 #include "sdkconfig.h"
@@ -34,8 +35,10 @@ typedef struct {
   size_t largest_8bit;   /**< Largest contiguous free 8-bit block. */
 } mem_snapshot_t;
 
+#if CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
 /** @brief Handle for the optional periodic monitor task (NULL until created). */
 static TaskHandle_t s_mem_task = NULL;
+#endif
 
 /** @brief Log tag for `ESP_LOG*` in this module. */
 static const char *TAG = "ESP::MEM";
@@ -103,6 +106,7 @@ void mem_LogSnapshot(const char *source, const char *stage, ...) {
   mem_LogHeapLine(source, label);
 }
 
+#if CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
 /**
  * @brief FreeRTOS task: delay, then log a periodic heap line.
  *
@@ -138,6 +142,7 @@ static esp_err_t mem_StartPeriodicMonitor(void) {
 
   return (task_result == pdPASS) ? ESP_OK : ESP_FAIL;
 }
+#endif /* CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE */
 
 /**
  * @copydoc mem_Init
@@ -146,7 +151,11 @@ esp_err_t mem_Init(bool start_periodic_monitor) {
   if (!start_periodic_monitor) {
     return ESP_OK;
   }
+#if CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
   return mem_StartPeriodicMonitor();
+#else
+  return ESP_ERR_NOT_SUPPORTED;
+#endif
 }
 
 #endif /* CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE */

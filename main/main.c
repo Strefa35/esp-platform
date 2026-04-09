@@ -21,6 +21,11 @@
 #include "mem_check.h"
 #include "tools.h"
 
+#if CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
+  #define START_PERIODIC_MONITOR true
+#else
+  #define START_PERIODIC_MONITOR false
+#endif
 
 static const char* TAG = "ESP::MAIN";
 
@@ -36,7 +41,7 @@ void app_main(void) {
   ESP_LOGI(TAG, "++%s()", __func__);
 
   MEM_CHECK({
-    result = mem_Init(CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE);
+    result = mem_Init(START_PERIODIC_MONITOR);
     if (result != ESP_OK) {
       ESP_LOGE(TAG, "[%s]() - mem_Init() failed", __func__);
     }
