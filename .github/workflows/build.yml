@@ -1,0 +1,68 @@
+name: Build firmware
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.board_name }}
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf@sha256:REPLACE_WITH_DIGEST_FOR_V5_5_1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - board_name: ESP32
+            target: esp32
+            sdkconfig_defaults: sdkconfig.defaults.esp32.debug
+          - board_name: ESP32-S3
+            target: esp32s3
+            sdkconfig_defaults: sdkconfig.defaults.esp32s3.debug
+          - board_name: ESP32-S2 Mini
+            target: esp32s2
+            sdkconfig_defaults: sdkconfig.defaults.esp32s2.debug
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Clone external components
+        run: |
+          # Clone and pin idf-extra-components to a known revision
+          git clone --recursive https://github.com/espressif/idf-extra-components.git ../idf-extra-components
+          git -C ../idf-extra-components checkout 0123456789abcdef0123456789abcdef01234567
+
+          # Clone and pin esp-drivers to a known revision
+          git clone --recursive https://github.com/Strefa35/esp-drivers.git ../esp-drivers
+          git -C ../esp-drivers checkout 89abcdef0123456789abcdef0123456789abcdef
+      - name: Build firmware for ${{ matrix.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          . /opt/esp/idf/export.sh
+          rm -rf build sdkconfig
+          cp "${{ matrix.sdkconfig_defaults }}" sdkconfig.defaults
+          idf.py set-target "${{ matrix.target }}"
+          idf.py build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp-platform-${{ matrix.target }}
+          path: |
+            build/*.bin
+            build/*.elf
+            build/*.map
+            build/bootloader/*.bin
+            build/partition_table/*.bin
+            build/flasher_args.json
+            sdkconfig
+          if-no-files-found: error
