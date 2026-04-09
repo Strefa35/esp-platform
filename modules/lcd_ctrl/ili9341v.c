@@ -66,7 +66,12 @@ static bool s_backlight_inited = false;
 static lcd_flush_done_cb_t s_flush_done_cb = NULL;
 static void* s_flush_done_ctx = NULL;
 
-
+/**
+ * @brief Convert 0–100% brightness to LEDC duty for the configured timer resolution.
+ *
+ * @param percent Input brightness; values above 100 are clamped.
+ * @return Duty cycle units for `ledc_set_duty`.
+ */
 static uint32_t lcd_BacklightPercentToDuty(uint8_t percent) {
   if (percent > 100U) {
     percent = 100U;
@@ -74,6 +79,14 @@ static uint32_t lcd_BacklightPercentToDuty(uint8_t percent) {
   return (LCD_BK_LIGHT_LEDC_MAX_DUTY * percent) / 100U;
 }
 
+/**
+ * @brief Drive the panel backlight GPIO via LEDC PWM.
+ *
+ * Requires successful display init (backlight channel configured).
+ *
+ * @param percent Brightness 0–100.
+ * @return ESP_OK on success, ESP_ERR_INVALID_STATE if backlight was not initialized.
+ */
 esp_err_t lcd_SetBacklightPercent(uint8_t percent) {
   if (!s_backlight_inited) {
     return ESP_ERR_INVALID_STATE;

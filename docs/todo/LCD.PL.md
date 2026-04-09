@@ -6,7 +6,7 @@ Modul `lcd_ctrl` zapewnia obsluge wyswietlacza i dotyku na platformie ESP:
 - panel dotykowy NS2009 po I2C
 - LVGL 9.x jako framework GUI
 
-Aktualnie modul jest rozwijany pod sprzet klasy ESP32 uzywany w tym projekcie.
+Aktualnie modul jest rozwijany pod **ESP32** i **ESP32-S3** (weryfikacja w `lcd_ctrl.c`); inne SoC nie przejda kompilacji.
 
 ## Aktualny stan UI
 
@@ -26,9 +26,11 @@ Wazna uwaga implementacyjna:
 
 ### Wygaszacz (`ui_screensaver`)
 Zaimplementowany i aktywny:
+- Po **zimnym starcie** aktywny jest **wygaszacz** do momentu **stabilnego dotkniecia** (wtedy `lcd_switch_screen` przechodzi na ekran glowny).
 - zegar analogowy (gdy `LV_USE_SCALE` jest wlaczone) lub cyfrowy fallback
 - etykieta daty
 - panel pogody: ikona, temperatura, opis i lokalizacja
+- automatyczny powrot do wygaszacza po bezczynnosci jest **wylaczony** w kodzie (`LCD_SCREENSAVER_IDLE_ENABLE` w `lcd_helper.c`); bez zmiany flagi dziala tylko przejscie „zbudz z wygaszacza”.
 
 ### Ekran konfiguracji
 - mockup istnieje (`docs/todo/lcd_mockup_config.png`)
@@ -43,7 +45,7 @@ Pliki referencyjne:
 ## Warstwy sterownika i integracji
 
 ### `lcd_ctrl.c`
-Punkty wejscia od strony kontrolera i obsluga wiadomosci przez kolejke.
+Punkty wejscia od strony kontrolera i obsluga wiadomosci przez kolejke (m.in. zdarzenia Ethernet/Wi-Fi/MQTT oraz UID/MAC z managera — patrz `lcdctrl_ParseMsg`).
 
 ### `lcd_helper.c`
 Warstwa integracji LVGL:

@@ -114,6 +114,11 @@ static lcd_data_t s_data = {
   .ambient_threshold_lux = 500,
 };
 
+/**
+ * @brief Set panel backlight brightness via the hardware layer (logs on failure).
+ *
+ * @param percent Brightness 0–100.
+ */
 static void lcd_set_backlight(uint8_t percent) {
   esp_err_t result = lcd_SetBacklightPercent(percent);
   if (result != ESP_OK) {
@@ -121,6 +126,11 @@ static void lcd_set_backlight(uint8_t percent) {
   }
 }
 
+/**
+ * @brief Switch between main UI and screensaver; recreates the target screen and adjusts backlight.
+ *
+ * @param screen Target screen (`LCD_SCREEN_MAIN` or `LCD_SCREEN_SCREENSAVER`).
+ */
 static void lcd_switch_screen(lcd_screen_t screen) {
   if (s_display == NULL || s_active_screen == screen) {
     return;
@@ -402,8 +412,13 @@ static esp_err_t lcd_InitLvgl(lcd_t* lcd_ptr) {
 }
 
 /**
- * Apply batched UI field updates. For connection masks, use d_bool[0]…[3] in mask bit order
- * (ETH=0, WIFI=1, MQTT=2, BT=3). Ambient, UID, MAC, IP: see lcd_update_t in lcd_helper.h.
+ * @brief Apply batched UI field updates under the state mutex (safe from the message task).
+ *
+ * For connection masks, set `d_bool[0]…[3]` in mask bit order (ETH, Wi-Fi, MQTT, BT).
+ * UID, MAC, IP, and ambient fields: see `lcd_update_t` and `LCD_MASK_*` in lcd_helper.h.
+ *
+ * @param mask   OR of `LCD_MASK_*` bits selecting which fields in @p update are valid.
+ * @param update Snapshot of values to merge into shared UI state.
  */
 void lcd_UpdateData(const uint32_t mask, const lcd_update_t* update) {
   if (s_state_mutex == NULL || update == NULL) {

@@ -6,7 +6,7 @@ The `lcd_ctrl` module provides display and touch support for the ESP platform us
 - NS2009 touch panel over I2C
 - LVGL 9.x as the GUI framework
 
-The module is currently focused on ESP32-class hardware used in this project.
+The module is currently focused on **ESP32** and **ESP32-S3** targets (see `lcd_ctrl.c`); other SoCs fail the build guard.
 
 ## Current UI Status
 
@@ -26,9 +26,11 @@ Important implementation note:
 
 ### Screensaver (`ui_screensaver`)
 Implemented and active:
+- On **cold boot** the active LVGL screen is the **screensaver** until the user completes a **stable touch** (then `lcd_switch_screen` opens the main UI).
 - Analog clock (when `LV_USE_SCALE` is enabled), or digital fallback when disabled
 - Date label
 - Weather panel with icon, temperature, summary, and location
+- Automatic return to the screensaver after idle timeout is **disabled** in code (`LCD_SCREENSAVER_IDLE_ENABLE` in `lcd_helper.c`); only the initial “wake from saver” path is active unless you re-enable it.
 
 ### Configuration screen
 - Mockup exists (`docs/todo/lcd_mockup_config.png`)
@@ -43,7 +45,7 @@ Design reference files:
 ## Driver and Integration Layers
 
 ### `lcd_ctrl.c`
-Controller-facing entry points and queue-based message handling.
+Controller-facing entry points and queue-based message handling. Handles `msg_t` types used for the status UI, including Ethernet and Wi-Fi link/IP events, MQTT events, and manager UID/MAC (see `lcdctrl_ParseMsg` in source).
 
 ### `lcd_helper.c`
 LVGL integration layer:

@@ -42,6 +42,11 @@
 
 static const char* TAG = "ESP::LCD";
 
+/**
+ * @brief Maps Ethernet application events to the ETH-connected flag on the LCD.
+ *
+ * @param event_id Value from the message bus (`data_eth_event_e`).
+ */
 static void lcdctrl_ApplyEthEvent(data_eth_event_e event_id) {
   bool connected = false;
   bool update = true;
@@ -73,6 +78,47 @@ static void lcdctrl_ApplyEthEvent(data_eth_event_e event_id) {
   ESP_LOGI(TAG, "--%s() - update: %d, connected: %d", __func__, update, connected);
 }
 
+/**
+ * @brief Maps Wi-Fi STA application events to the Wi-Fi-connected flag on the LCD.
+ *
+ * @param event_id Value from the message bus (`data_wifi_event_e`).
+ */
+static void lcdctrl_ApplyWifiEvent(data_wifi_event_e event_id) {
+  bool connected = false;
+  bool update = true;
+
+  ESP_LOGI(TAG, "++%s(event_id: %d [%s])", __func__, event_id, GET_DATA_WIFI_EVENT_NAME(event_id));
+  switch (event_id) {
+    case DATA_WIFI_EVENT_CONNECTED: {
+      connected = true;
+      break;
+    }
+    case DATA_WIFI_EVENT_DISCONNECTED: {
+      connected = false;
+      break;
+    }
+    case DATA_WIFI_EVENT_STA_STOP: {
+      connected = false;
+      break;
+    }
+    default: {
+      update = false;
+      break;
+    }
+  }
+  if (update) {
+    lcd_update_t u = {0};
+    u.u.d_bool[1] = connected;
+    lcd_UpdateData(LCD_MASK_WIFI_CONNECTED, &u);
+  }
+  ESP_LOGI(TAG, "--%s() - update: %d, connected: %d", __func__, update, connected);
+}
+
+/**
+ * @brief Maps MQTT application events to the MQTT-connected flag on the LCD.
+ *
+ * @param event_id Value from the message bus (`data_mqtt_event_e`).
+ */
 static void lcdctrl_ApplyMqttEvent(data_mqtt_event_e event_id) {
   bool connected = false;
   bool update = true;
@@ -156,6 +202,18 @@ static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
       break;
     }
 
+    case MSG_TYPE_WIFI_IP: {
+      lcd_update_t u = {0};
+      u.ip = msg->payload.wifi.u.ip_info.ip;
+      lcd_UpdateData(LCD_MASK_IP, &u);
+      break;
+    }
+
+    case MSG_TYPE_WIFI_EVENT: {
+      lcdctrl_ApplyWifiEvent(msg->payload.wifi.u.event_id);
+      break;
+    }
+
     case MSG_TYPE_MQTT_EVENT: {
       lcdctrl_ApplyMqttEvent(msg->payload.mqtt.u.event_id);
       break;
@@ -171,9 +229,9 @@ static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
 }
 
 /**
- * @brief LCD task's function
- * 
- * @param param 
+ * @brief LCD controller FreeRTOS task: dequeue messages and dispatch via lcdctrl_ParseMsg().
+ *
+ * @param param Unused (task parameter).
  */
 static void lcdctrl_TaskFn(void* param) {
   msg_t msg;

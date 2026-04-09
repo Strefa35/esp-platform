@@ -29,12 +29,13 @@
 #define LCD_MASK_IP                (1 << 8)
 
 /**
- * Payload for lcd_UpdateData(): OR together LCD_MASK_* bits.
- * - Connection: d_bool[0]=ETH, [1]=WIFI, [2]=MQTT, [3]=BT.
- * - Ambient: d_uint32[0]=lux (LCD_MASK_AMBIENT_LUX), d_uint32[1]=threshold (LCD_MASK_AMBIENT_THRESHOLD).
- * - UID: uid[] null-terminated (LCD_MASK_UID).
- * - MAC: u.d_uint8[0..5] (LCD_MASK_MAC).
- * - IP: ip IPv4 network byte order (LCD_MASK_IP); string updated only when ip != 0.
+ * @brief Payload for lcd_UpdateData(): OR together `LCD_MASK_*` bits.
+ *
+ * - Connection: `d_bool[0]` ETH, `[1]` Wi-Fi, `[2]` MQTT, `[3]` BT.
+ * - Ambient: `d_uint32[0]` lux (`LCD_MASK_AMBIENT_LUX`), `d_uint32[1]` threshold (`LCD_MASK_AMBIENT_THRESHOLD`).
+ * - UID: `uid[]` null-terminated (`LCD_MASK_UID`).
+ * - MAC: `u.d_uint8[0..5]` (`LCD_MASK_MAC`).
+ * - IP: `ip` IPv4 network byte order (`LCD_MASK_IP`); runtime string updated only when `ip != 0`.
  */
 typedef struct {
   union {
@@ -48,10 +49,26 @@ typedef struct {
   uint32_t ip;
 } lcd_update_t;
 
-
+/**
+ * @brief Bring up hardware, LVGL, timers, and the UI task (used by lcd_ctrl).
+ *
+ * @return ESP_OK on success, or an error from HW/LVGL setup.
+ */
 esp_err_t lcd_InitHelper(void);
+
+/**
+ * @brief Stop UI task, LVGL, timers, and release hardware (reverse of init).
+ *
+ * @return ESP_OK on success.
+ */
 esp_err_t lcd_DoneHelper(void);
 
+/**
+ * @brief Thread-safe merge of UI state from another task; see `lcd_update_t` and `LCD_MASK_*`.
+ *
+ * @param mask   Bitmask of fields to update.
+ * @param update Pointer to new values; ignored if NULL.
+ */
 void lcd_UpdateData(const uint32_t mask, const lcd_update_t* update);
 
 #endif /* __LCD_HELPER_H__ */
