@@ -278,6 +278,10 @@ static esp_err_t lcdctrl_Send(const msg_t* msg) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+  if (lcd_msg_queue == NULL) {
+    ESP_LOGW(TAG, "[%s] skipped (LCD controller not initialized)", __func__);
+    return ESP_ERR_INVALID_STATE;
+  }
   if (xQueueSend(lcd_msg_queue, msg, (TickType_t) 0) != pdPASS) {
     ESP_LOGE(TAG, "[%s] Message error. type: %d, from: 0x%08lx, to: 0x%08lx", __func__, msg->type, msg->from, msg->to);
     result = ESP_FAIL;

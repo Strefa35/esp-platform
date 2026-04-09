@@ -16,7 +16,6 @@
 #include "sdkconfig.h"
 
 #include "driver/gpio.h"
-#include "driver/ledc.h"
 #include "driver/spi_master.h"
 
 #include "esp_lcd_ili9341.h"
@@ -43,13 +42,6 @@
 #define LCD_PIN_NUM_LCD_CS         17
 #define LCD_PIN_NUM_BK_LIGHT       4
 
-#define LCD_BK_LIGHT_LEDC_MODE         LEDC_LOW_SPEED_MODE
-#define LCD_BK_LIGHT_LEDC_TIMER        LEDC_TIMER_0
-#define LCD_BK_LIGHT_LEDC_CHANNEL      LEDC_CHANNEL_0
-#define LCD_BK_LIGHT_LEDC_FREQ_HZ      5000
-#define LCD_BK_LIGHT_LEDC_DUTY_RES     LEDC_TIMER_13_BIT
-#define LCD_BK_LIGHT_LEDC_MAX_DUTY     ((1U << 13) - 1U)
-
 #define LCD_H_RES                  320
 #define LCD_V_RES                  240
 
@@ -67,44 +59,34 @@ static lcd_flush_done_cb_t s_flush_done_cb = NULL;
 static void* s_flush_done_ctx = NULL;
 
 /**
- * @brief Convert 0–100% brightness to LEDC duty for the configured timer resolution.
+ * @brief Apply backlight on/off from a 0–100% value (binary: 0 = off, else on).
  *
- * @param percent Input brightness; values above 100 are clamped.
- * @return Duty cycle units for `ledc_set_duty`.
+ * Backlight is driven as a plain GPIO. LEDC PWM was avoided because on ESP32
+ * `ledc_update_duty` can spin in `ledc_ll_set_duty_start` while `duty_start` never
+ * clears, which runs inside a critical section and triggers Interrupt WDT.
+ *
+ * @param percent 0 turns backlight off; any value 1–100 turns it on.
  */
-static uint32_t lcd_BacklightPercentToDuty(uint8_t percent) {
-  if (percent > 100U) {
-    percent = 100U;
-  }
-  return (LCD_BK_LIGHT_LEDC_MAX_DUTY * percent) / 100U;
+static void lcd_BacklightApplyPercent(uint8_t percent) {
+  bool on = percent > 0U;
+  int level = on ? LCD_BK_LIGHT_ON_LEVEL : (LCD_BK_LIGHT_ON_LEVEL ? 0 : 1);
+  gpio_set_level(LCD_PIN_NUM_BK_LIGHT, level);
 }
 
 /**
- * @brief Drive the panel backlight GPIO via LEDC PWM.
+ * @brief Drive the panel backlight GPIO.
  *
- * Requires successful display init (backlight channel configured).
- *
- * @param percent Brightness 0–100.
+ * @param percent Brightness 0–100 (GPIO mode: only off vs full on).
  * @return ESP_OK on success, ESP_ERR_INVALID_STATE if backlight was not initialized.
  */
 esp_err_t lcd_SetBacklightPercent(uint8_t percent) {
   if (!s_backlight_inited) {
     return ESP_ERR_INVALID_STATE;
   }
-
-  uint32_t duty = lcd_BacklightPercentToDuty(percent);
-  if (LCD_BK_LIGHT_ON_LEVEL == 0) {
-    duty = LCD_BK_LIGHT_LEDC_MAX_DUTY - duty;
+  if (percent > 100U) {
+    percent = 100U;
   }
-
-  ESP_RETURN_ON_ERROR(
-    ledc_set_duty(LCD_BK_LIGHT_LEDC_MODE, LCD_BK_LIGHT_LEDC_CHANNEL, duty),
-    TAG,
-    "ledc_set_duty failed");
-  ESP_RETURN_ON_ERROR(
-    ledc_update_duty(LCD_BK_LIGHT_LEDC_MODE, LCD_BK_LIGHT_LEDC_CHANNEL),
-    TAG,
-    "ledc_update_duty failed");
+  lcd_BacklightApplyPercent(percent);
   return ESP_OK;
 }
 
@@ -143,27 +125,16 @@ static esp_err_t lcd_SetupDisplayHw(lcd_t* lcd_ptr) {
   lcd_ptr->h_res = LCD_H_RES;
   lcd_ptr->v_res = LCD_V_RES;
 
-  ledc_timer_config_t ledc_timer = {
-    .speed_mode = LCD_BK_LIGHT_LEDC_MODE,
-    .duty_resolution = LCD_BK_LIGHT_LEDC_DUTY_RES,
-    .timer_num = LCD_BK_LIGHT_LEDC_TIMER,
-    .freq_hz = LCD_BK_LIGHT_LEDC_FREQ_HZ,
-    .clk_cfg = LEDC_AUTO_CLK,
+  const gpio_config_t bk_gpio = {
+    .pin_bit_mask = 1ULL << LCD_PIN_NUM_BK_LIGHT,
+    .mode = GPIO_MODE_OUTPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE,
   };
-  ESP_RETURN_ON_ERROR(ledc_timer_config(&ledc_timer), TAG, "ledc_timer_config failed");
-
-  ledc_channel_config_t ledc_channel = {
-    .gpio_num = LCD_PIN_NUM_BK_LIGHT,
-    .speed_mode = LCD_BK_LIGHT_LEDC_MODE,
-    .channel = LCD_BK_LIGHT_LEDC_CHANNEL,
-    .intr_type = LEDC_INTR_DISABLE,
-    .timer_sel = LCD_BK_LIGHT_LEDC_TIMER,
-    .duty = 0,
-    .hpoint = 0,
-  };
-  ESP_RETURN_ON_ERROR(ledc_channel_config(&ledc_channel), TAG, "ledc_channel_config failed");
+  ESP_RETURN_ON_ERROR(gpio_config(&bk_gpio), TAG, "backlight gpio_config failed");
   s_backlight_inited = true;
-  ESP_RETURN_ON_ERROR(lcd_SetBacklightPercent(0), TAG, "backlight set failed");
+  lcd_BacklightApplyPercent(0);
 
   spi_bus_config_t buscfg = {
     .sclk_io_num = LCD_PIN_NUM_SCLK,
@@ -219,7 +190,8 @@ static esp_err_t lcd_SetupDisplayHw(lcd_t* lcd_ptr) {
 
   ESP_RETURN_ON_ERROR(lcd_SetBacklightPercent(100), TAG, "backlight set failed");
 
-  lcd_ptr->buffer_size = (size_t) ((lcd_ptr->h_res * lcd_ptr->v_res) / 10U) * sizeof(uint16_t);
+  /* Partial buffer: 1/20 of the frame saves ~15 KiB vs 1/10 (two DMA buffers). Helps leave heap for WiFi PHY cal. */
+  lcd_ptr->buffer_size = (size_t) ((lcd_ptr->h_res * lcd_ptr->v_res) / 20U) * sizeof(uint16_t);
   lcd_ptr->buffer1 = spi_bus_dma_memory_alloc(LCD_HOST, lcd_ptr->buffer_size, 0);
   lcd_ptr->buffer2 = spi_bus_dma_memory_alloc(LCD_HOST, lcd_ptr->buffer_size, 0);
   assert(lcd_ptr->buffer1 != NULL);
@@ -271,7 +243,8 @@ esp_err_t lcd_DoneDisplayHw(void) {
   s_flush_done_ctx = NULL;
 
   if (s_backlight_inited) {
-    ledc_stop(LCD_BK_LIGHT_LEDC_MODE, LCD_BK_LIGHT_LEDC_CHANNEL, !LCD_BK_LIGHT_ON_LEVEL);
+    lcd_BacklightApplyPercent(0);
+    gpio_reset_pin(LCD_PIN_NUM_BK_LIGHT);
     s_backlight_inited = false;
   }
 

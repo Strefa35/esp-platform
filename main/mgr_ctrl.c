@@ -682,8 +682,12 @@ esp_err_t MGR_Init(void) {
   }
 
   ESP_LOGD(TAG, "Modules to register: %d", mgr_modules_cnt);
+  result = ESP_OK;
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-    result = mgr_Init(idx);
+    esp_err_t r = mgr_Init(idx);
+    if (r != ESP_OK && result == ESP_OK) {
+      result = r;
+    }
   }
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
