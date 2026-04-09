@@ -31,7 +31,7 @@
 #define TEMPLATE_TASK_STACK_SIZE    4096
 #define TEMPLATE_TASK_PRIORITY      12
 
-#define TEMPLATE_MSG_MAX            10
+#define TEMPLATE_MSG_MAX            8
 
 
 static const char* TAG = "ESP::TEMPLATE";
@@ -85,7 +85,7 @@ static esp_err_t parseMqttData(const char* json_str) {
       }
     } else {
       ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
-      ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+      ESP_LOGE(TAG, "[%s] '%s'", __func__, json_str);
     }
     cJSON_Delete(root);
   }

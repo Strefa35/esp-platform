@@ -33,7 +33,7 @@
 #define RELAY_TASK_STACK_SIZE     4096
 #define RELAY_TASK_PRIORITY       12
 
-#define RELAY_MSG_MAX             10
+#define RELAY_MSG_MAX             4
 
 #define RELAY_NUMBER_MIN          0
 #define RELAY_NUMBER_MAX          1
@@ -166,8 +166,7 @@ static esp_err_t relayctrl_ParseSetRelays(const cJSON* relays) {
       if (relay) {
         result = relayctrl_SetRelay(relay);
       } else {
-        ESP_LOGE(TAG, "[%s] Bad relay format.", __func__);
-        ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(relay));
+        ESP_LOGE(TAG, "[%s] Bad relay format (index %d).", __func__, idx);
         break;
       }
     }
@@ -300,7 +299,7 @@ static esp_err_t relayctrl_ParseMqttData(const char* json_str) {
       }
     } else {
       ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
-      ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+      ESP_LOGE(TAG, "[%s] '%s'", __func__, json_str);
     }
     cJSON_Delete(root);
   }

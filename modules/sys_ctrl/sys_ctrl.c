@@ -38,7 +38,8 @@
 #define SYS_TASK_STACK_SIZE     4096
 #define SYS_TASK_PRIORITY       12
 
-#define SYS_MSG_MAX             10
+#define SYS_MSG_MAX             8
+
 #define SYS_NTP_SYNC_RETRY_MAX  15
 #define SYS_NTP_SYNC_CHECK_MS   2000
 
