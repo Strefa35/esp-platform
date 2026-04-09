@@ -4,7 +4,8 @@ Parse idf_monitor / serial logs for ESP::MEM heap snapshots and print
 per-module delta tables for MGR_Init and MGR_Run (same methodology as manual
 analysis: delta = previous free_heap - current free_heap at each step).
 
-Log lines match firmware output from main/mem.c, e.g.:
+Log lines match firmware output from main/mem_check.c (heap fields printed as decimal
+integers via %zu for size_t), e.g.:
   I (t) ESP::MEM: [source][stage] free_heap=... free_8bit=... min_free_8bit=... largest_8bit=...
 
 Deltas use free_heap only. Other fields are parsed when present and summarized
@@ -151,7 +152,6 @@ def print_init_table(events: List[MemEvent], start: int, end: int) -> None:
             continue
         if e.stage == "mgr_init_begin":
             prev_heap = e.free_heap
-            baseline = e.free_heap
             continue
         parsed = parse_module_stage(e.stage)
         if parsed and parsed[0] == "mgr_init_module_done":

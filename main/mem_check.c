@@ -1,6 +1,6 @@
 /**
- * @file mem.c
- * @brief Implementation of optional heap snapshot logging (`mem` module).
+ * @file mem_check.c
+ * @brief Implementation of optional heap snapshot logging (`mem_check` module).
  *
  * @details
  * Built only when `CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE` is set. Samples heap
@@ -12,7 +12,7 @@
 
 #if CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE
 
-#include "mem.h"
+#include "mem_check.h"
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -76,13 +76,13 @@ static void mem_LogHeapLine(const char *source, const char *label) {
   }
 
   ESP_LOGI(TAG,
-           "[%s][%s] free_heap=%u free_8bit=%u min_free_8bit=%u largest_8bit=%u",
+           "[%s][%s] free_heap=%zu free_8bit=%zu min_free_8bit=%zu largest_8bit=%zu",
            src,
            stage,
-           (unsigned)snapshot.free_heap,
-           (unsigned)snapshot.free_8bit,
-           (unsigned)snapshot.min_free_8bit,
-           (unsigned)snapshot.largest_8bit);
+           snapshot.free_heap,
+           snapshot.free_8bit,
+           snapshot.min_free_8bit,
+           snapshot.largest_8bit);
 }
 
 /**

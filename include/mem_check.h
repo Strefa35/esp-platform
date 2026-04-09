@@ -1,16 +1,17 @@
 /**
- * @file mem.h
+ * @file mem_check.h
  * @brief Optional heap snapshot logging API (Kconfig-controlled).
  *
  * @details
  * When `CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE` is set, this header declares
  * `mem_Init()` and `mem_LogSnapshot()` and defines `MEM_CHECK()`.
- * When it is unset, only `MEM_CHECK()` is defined as empty so call sites
- * compile out without linking the `mem` implementation.
+ * When it is unset, `MEM_CHECK()` expands to an empty `do { } while (0)` so call
+ * sites compile out without linking the `mem_check` implementation, while staying
+ * a single statement (safe after `if` / `else`, loops, etc.).
  */
 
-#ifndef __MEM_H__
-#define __MEM_H__
+#ifndef __MEM_CHECK_H__
+#define __MEM_CHECK_H__
 
 #include "sdkconfig.h"
 
@@ -45,23 +46,30 @@ esp_err_t mem_Init(bool start_periodic_monitor);
 void mem_LogSnapshot(const char *source, const char *stage, ...);
 
 /**
- * @brief Expand to @p stmt when snapshot logging is enabled; expand to nothing otherwise.
+ * @brief Single-statement wrapper for @p stmt when snapshot logging is enabled.
  *
- * Place a semicolon after the macro invocation, e.g.:
+ * Uses `do { ... } while (0)` so the expansion is one statement (e.g. safe for
+ * `if (c) MEM_CHECK(...); else ...`). Place a semicolon after the invocation, e.g.:
  * `MEM_CHECK(mem_LogSnapshot(__func__, "done"));`
  *
  * @param[in] stmt A complete C statement (typically a `mem_*` call).
  */
-#define MEM_CHECK(stmt) stmt
+#define MEM_CHECK(stmt) \
+    do {                  \
+        stmt;             \
+    } while (0)
 
 #else /* !CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE */
 
 /**
- * @brief No-op: snapshot API is disabled; @p stmt is not compiled.
+ * @brief No-op single statement: snapshot API is disabled; @p stmt is not expanded
+ *        or compiled (argument is not substituted).
  * @param[in] stmt Ignored.
  */
-#define MEM_CHECK(stmt)
+#define MEM_CHECK(stmt) \
+    do {                  \
+    } while (0)
 
 #endif /* CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE */
 
-#endif /* __MEM_H__ */
+#endif /* __MEM_CHECK_H__ */

@@ -21,7 +21,7 @@
 
 #include "mgr_ctrl.h"
 #include "mgr_reg.h"
-#include "mem.h"
+#include "mem_check.h"
 #include "tools.h"
 
 #include "mgr_reg_list.h"

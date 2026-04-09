@@ -1,6 +1,6 @@
 # Heap log parser (`scripts/parse_mem_log.py`)
 
-This script reads a serial or **idf_monitor** log that contains `ESP::MEM` lines emitted by the **`mem`** module (`mem_LogSnapshot` checkpoints and, when enabled, periodic lines with stage **`periodic`** from `mem_MonitorTask`). It prints Markdown tables with **approximate per-module heap deltas** for the manager init and run phases.
+This script reads a serial or **idf_monitor** log that contains `ESP::MEM` lines emitted by **`mem_check`** (`mem_LogSnapshot` checkpoints and, when enabled, periodic lines with stage **`periodic`** from `mem_MonitorTask`). It prints Markdown tables with **approximate per-module heap deltas** for the manager init and run phases.
 
 ## Requirements
 
@@ -58,7 +58,7 @@ ANSI color codes are stripped so logs from **idf_monitor** are accepted as-is.
 ## Related files
 
 - `scripts/parse_mem_log.py` — implementation
-- `include/mem.h` / `main/mem.c` — heap logging API and implementation (see Doxygen in sources)
+- `include/mem_check.h` / `main/mem_check.c` — heap logging API and implementation (see Doxygen in sources)
 - `main/main.c` — `mem_Init`, `MEM_CHECK(mem_LogSnapshot(...))` boot checkpoints
 - `main/mgr_ctrl.c` — `mem_LogSnapshot` call sites for init/run
 - [memory.md](memory.md) — firmware memory monitoring configuration

@@ -18,7 +18,7 @@
 
 #include "nvs_ctrl.h"
 #include "mgr_ctrl.h"
-#include "mem.h"
+#include "mem_check.h"
 #include "tools.h"
 
 

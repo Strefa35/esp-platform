@@ -5,7 +5,7 @@ This document describes how to measure:
 - flash/image usage after build
 - RAM usage at runtime (early start and after system startup)
 
-The firmware also provides a small **`mem` module** (`include/mem.h`, `main/mem.c`) for consistent heap snapshots in logs. Public functions and macros are described in **Doxygen** comments in those files (suitable for `doxygen` or IDF doc generation).
+The firmware also provides a small **`mem_check` module** (`include/mem_check.h`, `main/mem_check.c`) for consistent heap snapshots in logs. Public functions and macros are described in **Doxygen** comments in those files (suitable for `doxygen` or IDF doc generation).
 
 ---
 
@@ -113,7 +113,7 @@ Single-file **flash** standouts in LVGL builds often include **`lv_font_montserr
 
 ---
 
-## 2) Runtime heap snapshots (`mem` module)
+## 2) Runtime heap snapshots (`mem_check` module)
 
 ### menuconfig
 
@@ -121,7 +121,7 @@ Open **ESP32 - Platform → MAIN**:
 
 | Option | Meaning |
 |--------|---------|
-| **Enable memory snapshot logs** (`CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE`) | When enabled, the `mem` API and `MEM_CHECK(...)` call sites compile in; heap lines go to the log (tag `ESP::MEM`). When off, those call sites compile to empty statements—no stub functions, no linker references. Default: **off**. |
+| **Enable memory snapshot logs** (`CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE`) | When enabled, the heap snapshot API (`mem_*` / `MEM_CHECK`) and call sites compile in; heap lines go to the log (tag `ESP::MEM`). When off, **`MEM_CHECK`** expands to an empty **`do { } while (0)`** (a no-op single statement); wrapped snapshot code is omitted—no stub functions, no linker references. Default: **off**. |
 | **Enable periodic memory monitor task** (`CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE`) | Depends on snapshot enable. Exposes period/stack/priority symbols used when creating the monitor task. **`app_main`** passes this value into **`mem_Init(bool)`** so the default follows menuconfig; you may pass **`false`** at runtime to skip starting the task even when this option is on. Default: **off**. |
 | **Memory monitor period [ms]** (`CONFIG_MAIN_MEMORY_MONITOR_PERIOD_MS`) | Interval between periodic log lines (1000–600000, default 10000). The task **waits** this long **before** the first `periodic` line, then after each line. |
 | **Memory monitor task stack [bytes]** (`CONFIG_MAIN_MEMORY_MONITOR_TASK_STACK`) | Stack size for the monitor task (2048–8192, default 3072). |
@@ -129,19 +129,20 @@ Open **ESP32 - Platform → MAIN**:
 
 After changing options, rebuild (`idf.py build`).
 
-### Headers, macros, and conditional API (`include/mem.h`)
+### Headers, macros, and conditional API (`include/mem_check.h`)
 
-`mem.h` includes `sdkconfig.h` and exposes symbols **only when snapshot logging is enabled**:
+`mem_check.h` includes `sdkconfig.h` and exposes symbols **only when snapshot logging is enabled**:
 
-- When **`CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE`** is on: **`mem_Init(bool)`**, **`mem_LogSnapshot()`**, and **`MEM_CHECK(stmt)`** (expands to `stmt`). Implementation details and **`static`** helpers live in **`main/mem.c`**.
-- When it is off: **`MEM_CHECK(stmt)`** is still defined but expands to nothing—wrap snapshot / **`mem_Init`** call sites so they compile out (no `mem_*` declarations in that build).
+- When **`CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE`** is on: **`mem_Init(bool)`**, **`mem_LogSnapshot()`**, and **`MEM_CHECK(stmt)`**, which expands to **`do { stmt; } while (0)`** (one statement, safe in **`if` / `else`** and similar positions). Implementation details and **`static`** helpers live in **`main/mem_check.c`**.
+- When it is off: **`MEM_CHECK(stmt)`** expands to **`do { } while (0)`**; **`stmt`** is not substituted—wrap snapshot / **`mem_Init`** call sites so they compile out (no `mem_*` declarations in that build).
 
-### Implementation notes (`main/mem.c`)
+### Implementation notes (`main/mem_check.c`)
 
 - The translation unit is built only when **`CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE`** is set.
 - **Internal** pieces (not in the header): **`mem_snapshot_t`**, **`mem_GetSnapshot`**, **`mem_LogHeapLine`**, **`mem_MonitorTask`**, **`mem_StartPeriodicMonitor`**. They feed **`mem_LogSnapshot`** and the optional periodic task.
 - **FreeRTOS** headers are included whenever snapshots are enabled; the periodic task is created only if **`mem_Init(true)`** is used (e.g. **`mem_Init(CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE)`** in **`main/main.c`**). Task parameters (**`CONFIG_MAIN_MEMORY_MONITOR_*`**) are the menuconfig values that appear when **Enable periodic memory monitor task** is on—do not call **`mem_Init(true)`** in a configuration where those macros are missing.
 - The monitor loop calls **`vTaskDelay`** with the configured period **before** each **`[mem_MonitorTask][periodic]`** line (including the first iteration).
+- Logged heap counters are **`size_t`** from ESP-IDF heap APIs; **`mem_LogHeapLine`** prints them with **`%zu`** so the serial format matches the type on all targets (no **`unsigned` / `%u`** truncation).
 
 #### Public functions (when compiled in)
 
@@ -151,14 +152,14 @@ esp_err_t mem_Init(bool start_periodic_monitor);
 void mem_LogSnapshot(const char *source, const char *stage, ...);
 ```
 
-- **`mem_Init`** — call **once** from **`app_main`** (after optional early **`mem_LogSnapshot`**). If **`start_periodic_monitor`** is **`false`**, returns **`ESP_OK`** and does **not** create the periodic task. If **`true`**, calls **`static mem_StartPeriodicMonitor()`** in **`mem.c`**: returns **`ESP_OK`** if the task already exists or **`xTaskCreate`** succeeds, else **`ESP_FAIL`**. Typical default: **`mem_Init(CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE)`** in **`main/main.c`** so menuconfig controls whether **`true`** is passed. Use **`mem_Init(false)`** to keep checkpoint logging but skip the background task for a given boot.
+- **`mem_Init`** — call **once** from **`app_main`** (after optional early **`mem_LogSnapshot`**). If **`start_periodic_monitor`** is **`false`**, returns **`ESP_OK`** and does **not** create the periodic task. If **`true`**, calls **`static mem_StartPeriodicMonitor()`** in **`mem_check.c`**: returns **`ESP_OK`** if the task already exists or **`xTaskCreate`** succeeds, else **`ESP_FAIL`**. Typical default: **`mem_Init(CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE)`** in **`main/main.c`** so menuconfig controls whether **`true`** is passed. Use **`mem_Init(false)`** to keep checkpoint logging but skip the background task for a given boot.
 - **`mem_LogSnapshot`** — reads the heap (internally), then logs one line. `source` is usually `__func__`. `stage` is a **printf-style format string**; optional arguments follow (e.g. module name).
 
 The log fields **`free_heap`**, **`free_8bit`**, **`min_free_8bit`**, and **`largest_8bit`** come from the same internal snapshot used for **`mem_LogSnapshot`**; there is no exported **`mem_GetSnapshot`** or **`mem_snapshot_t`**—call **`esp_get_free_heap_size()`** / **`heap_caps_*`** in your own code if you need numeric access outside this module.
 
 #### Call-site pattern (recommended)
 
-Use **`MEM_CHECK`** for any single statement that should exist only when snapshot logging is enabled (semicolon **after** the closing parenthesis of the macro):
+Use **`MEM_CHECK`** for any single statement that should exist only when snapshot logging is enabled (semicolon **after** the macro invocation). The macro is a **`do { ... } while (0)`** wrapper, so it counts as one statement (e.g. **`if (cond) MEM_CHECK(...); else ...`** is well-formed):
 
 ```c
 MEM_CHECK(mem_LogSnapshot(__func__, "after_nvs_init"));
@@ -196,7 +197,7 @@ Checkpoints are wired in:
 - **`main/main.c`** — `MEM_CHECK(mem_LogSnapshot(...))` at early boot and after `tools_Init`, `NVS_Init`, `MGR_Init`, `MGR_Run`; **`MEM_CHECK({ result = mem_Init(CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE); ... })`** once near the start (periodic task only if Kconfig allows it **and** the argument is true).
 - **`main/mgr_ctrl.c`** — same **`MEM_CHECK(mem_LogSnapshot(...))`** pattern for manager lifecycle and per-module steps (stage strings include the registered module name where relevant).
 
-**Convention:** only **`main.c`** should call **`mem_Init`**. **`main.c`** and **`mgr_ctrl.c`** use **`MEM_CHECK` / `mem_LogSnapshot`** at checkpoints. Implementation stays in **`main/mem.c`**; do not add `#include "mem.h"` in other components unless you deliberately extend this policy.
+**Convention:** only **`main.c`** should call **`mem_Init`**. **`main.c`** and **`mgr_ctrl.c`** use **`MEM_CHECK` / `mem_LogSnapshot`** at checkpoints. Implementation stays in **`main/mem_check.c`**; do not add `#include "mem_check.h"` in other components unless you deliberately extend this policy.
 
 ### Interpreting values
 
@@ -221,7 +222,7 @@ for (;;) {
 }
 ```
 
-To read heap metrics in application code without going through **`mem_LogSnapshot`**, use ESP-IDF APIs directly (e.g. **`esp_get_free_heap_size()`**, **`heap_caps_get_free_size(MALLOC_CAP_8BIT)`**, **`heap_caps_get_minimum_free_size`**, **`heap_caps_get_largest_free_block`**)—that mirrors what **`main/mem.c`** does internally.
+To read heap metrics in application code without going through **`mem_LogSnapshot`**, use ESP-IDF APIs directly (e.g. **`esp_get_free_heap_size()`**, **`heap_caps_get_free_size(MALLOC_CAP_8BIT)`**, **`heap_caps_get_minimum_free_size`**, **`heap_caps_get_largest_free_block`**)—that mirrors what **`main/mem_check.c`** does internally.
 
 Alternatively, wrap custom code in `#if CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE` if you prefer not to use **`MEM_CHECK`** for multi-line logic.
 
@@ -246,4 +247,4 @@ Alternatively, wrap custom code in `#if CONFIG_MAIN_MEMORY_SNAPSHOT_ENABLE` if y
 
 - Build-time size reports and runtime heap metrics answer different questions; both are useful.
 - Always compare runs with the same chip target and comparable `sdkconfig`; otherwise numbers are not directly comparable.
-- Logging to a file on the device (SPIFFS/LittleFS/FAT) is not implemented in `mem`; capture serial output on the host if you need a log file without extra flash wear.
+- Logging to a file on the device (SPIFFS/LittleFS/FAT) is not implemented in `mem_check`; capture serial output on the host if you need a log file without extra flash wear.
