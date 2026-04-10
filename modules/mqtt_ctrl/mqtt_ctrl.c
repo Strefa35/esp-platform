@@ -44,7 +44,7 @@
 #define MQTT_TASK_STACK_SIZE          4096
 #define MQTT_TASK_PRIORITY            9
 
-#define MQTT_MSG_MAX                  10
+#define MQTT_MSG_MAX                  8
 
 #define MQTT_TOPIC_MAX_LEN            (32U)
 #define MQTT_UID_LEN                  (10U)
@@ -950,7 +950,7 @@ static esp_err_t mqttctrl_ParseMqttData(const char* json_str) {
     }
   } else {
     ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
-    ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+    ESP_LOGE(TAG, "[%s] '%s'", __func__, json_str);
   }
   cJSON_Delete(root);
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);

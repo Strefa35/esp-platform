@@ -1,3 +1,7 @@
+# Build and flash (ESP-IDF)
+
+Espressif doc links below may show a different IDF minor version than your installed toolchain; adjust the version segment in the URL if needed (e.g. v5.5 vs v5.4).
+
 # Prepare platform depend on MCU (target)
 To show list of supported targets:
 ```idf.py --list-targets```

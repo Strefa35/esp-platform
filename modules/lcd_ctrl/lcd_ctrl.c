@@ -32,7 +32,7 @@
 #define LCD_TASK_STACK_SIZE       4096
 #define LCD_TASK_PRIORITY         10
 
-#define LCD_MSG_MAX               10
+#define LCD_MSG_MAX               8
 
 
 static const char* TAG = "ESP::LCD";

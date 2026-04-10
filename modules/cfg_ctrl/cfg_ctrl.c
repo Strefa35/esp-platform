@@ -29,7 +29,7 @@
 #define CFG_TASK_STACK_SIZE     4096
 #define CFG_TASK_PRIORITY       12
 
-#define CFG_MSG_MAX             10
+#define CFG_MSG_MAX             8
 
 
 static const char* TAG = "EPS::CFG";

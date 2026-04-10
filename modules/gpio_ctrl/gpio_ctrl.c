@@ -28,7 +28,7 @@
 #define GPIO_TASK_STACK_SIZE      4096
 #define GPIO_TASK_PRIORITY        12
 
-#define GPIO_MSG_MAX              10
+#define GPIO_MSG_MAX              4
 
 
 static const char* TAG = "ESP::GPIO";

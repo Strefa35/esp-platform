@@ -21,6 +21,7 @@
 
 #include "mgr_ctrl.h"
 #include "mgr_reg.h"
+#include "mem_check.h"
 #include "tools.h"
 
 #include "mgr_reg_list.h"
@@ -32,7 +33,7 @@
 #define MGR_TASK_STACK_SIZE     4096
 #define MGR_TASK_PRIORITY       8
 
-#define MGR_MSG_MAX             40
+#define MGR_MSG_MAX             16
 
 #define GET_ETH_MAC(_mac)       (_mac)[0], (_mac)[1], (_mac)[2], (_mac)[3], (_mac)[4], (_mac)[5]
 /** Use when argument is data_eth_mac_t* (not the array itself); mac[0] would be the whole 6-byte row. */
@@ -429,7 +430,7 @@ static esp_err_t mgr_ParseRegisterRequest(const data_mqtt_data_t* data_ptr) {
       }
     } else {
       ESP_LOGE(TAG, "[%s] Bad data format. Missing operation field.", __func__);
-      ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+      ESP_LOGE(TAG, "[%s] '%s'", __func__, data_ptr->msg);
     }
     cJSON_Delete(root);
   }
@@ -569,6 +570,7 @@ static esp_err_t mgr_ParseMsg(const msg_t* msg) {
       break;
     }
   }
+  MEM_CHECK(mem_LogSnapshot(__func__, "mgr_parse_msg_done"));
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -649,6 +651,7 @@ esp_err_t MGR_Init(void) {
   esp_log_level_set(TAG, CONFIG_MGR_CTRL_LOG_LEVEL);
 
   ESP_LOGI(TAG, "++%s()", __func__);
+  MEM_CHECK(mem_LogSnapshot(__func__, "mgr_init_begin"));
 
   ESP_LOGD(TAG, "[%s] Size of msg_t: %d", __func__, sizeof(msg_t));
 
@@ -682,9 +685,15 @@ esp_err_t MGR_Init(void) {
   }
 
   ESP_LOGD(TAG, "Modules to register: %d", mgr_modules_cnt);
+  result = ESP_OK;
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-    result = mgr_Init(idx);
+    esp_err_t r = mgr_Init(idx);
+    if (r != ESP_OK && result == ESP_OK) {
+      result = r;
+    }
+    MEM_CHECK(mem_LogSnapshot(__func__, "mgr_init_module_done: %s", mgr_reg_list[idx].name));
   }
+  MEM_CHECK(mem_LogSnapshot(__func__, "mgr_init_done"));
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -698,8 +707,13 @@ esp_err_t MGR_Done(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+  MEM_CHECK(mem_LogSnapshot(__func__, "mgr_done_begin"));
   for (int idx = mgr_modules_cnt - 1; idx >= 0; --idx) {
-    result = mgr_Done(idx);
+    esp_err_t r = mgr_Done(idx);
+    if (r != ESP_OK && result == ESP_OK) {
+      result = r;
+    }
+    MEM_CHECK(mem_LogSnapshot(__func__, "mgr_done_module_done: %s", mgr_reg_list[idx].name));
   }
   if (mgr_task_id) {
     ESP_LOGD(TAG, "[%s] Task stopped", __func__);
@@ -712,6 +726,7 @@ esp_err_t MGR_Done(void) {
     vQueueDelete(mgr_msg_queue);
     ESP_LOGD(TAG, "[%s] Queue deleted", __func__);
   }
+  MEM_CHECK(mem_LogSnapshot(__func__, "mgr_done_end"));
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -725,15 +740,21 @@ esp_err_t MGR_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+  MEM_CHECK(mem_LogSnapshot(__func__, "mgr_run_begin"));
 
   for (int idx = 0; idx < mgr_modules_cnt; ++idx) {
-    result = mgr_Run(idx);
+    esp_err_t r = mgr_Run(idx);
+    if (r != ESP_OK && result == ESP_OK) {
+      result = r;
+    }
+    MEM_CHECK(mem_LogSnapshot(__func__, "mgr_run_module_done: %s", mgr_reg_list[idx].name));
   }
 
   ESP_LOGD(TAG, "[%s] Wait on xSemaphoreTake...", __func__);
   xSemaphoreTake(mgr_sem_id, portMAX_DELAY);
   ESP_LOGD(TAG, "[%s] xSemaphoreTake was released.", __func__);
 
+  MEM_CHECK(mem_LogSnapshot(__func__, "mgr_run_end"));
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }

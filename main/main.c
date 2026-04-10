@@ -18,8 +18,14 @@
 
 #include "nvs_ctrl.h"
 #include "mgr_ctrl.h"
+#include "mem_check.h"
 #include "tools.h"
 
+#if CONFIG_MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
+  #define START_PERIODIC_MONITOR true
+#else
+  #define START_PERIODIC_MONITOR false
+#endif
 
 static const char* TAG = "ESP::MAIN";
 
@@ -34,25 +40,38 @@ void app_main(void) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
+  MEM_CHECK({
+    result = mem_Init(START_PERIODIC_MONITOR);
+    if (result != ESP_OK) {
+      ESP_LOGE(TAG, "[%s]() - mem_Init() failed", __func__);
+    }
+  });
+
+  MEM_CHECK(mem_LogSnapshot(__func__, "app_main_begin"));
+
   result = tools_Init();
   if (result != ESP_OK) {
     ESP_LOGE(TAG, "[%s]() - tools_Init() failed", __func__);
   }
+  MEM_CHECK(mem_LogSnapshot(__func__, "after_tools_init"));
 
   result = NVS_Init();
   if (result != ESP_OK) {
     ESP_LOGE(TAG, "[%s]() - NVS_Init() failed", __func__);
   }
+  MEM_CHECK(mem_LogSnapshot(__func__, "after_nvs_init"));
 
   result = MGR_Init();
   if (result != ESP_OK) {
     ESP_LOGE(TAG, "[%s]() - MGR_Init() failed", __func__);
   }
+  MEM_CHECK(mem_LogSnapshot(__func__, "after_mgr_init"));
 
   result = MGR_Run();
   if (result != ESP_OK) {
     ESP_LOGE(TAG, "[%s]() - MGR_Run() failed", __func__);
   }
+  MEM_CHECK(mem_LogSnapshot(__func__, "after_mgr_run"));
 
   result = MGR_Done();
   if (result != ESP_OK) {

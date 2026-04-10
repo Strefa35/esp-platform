@@ -164,18 +164,6 @@ static mgr_reg_t mgr_reg_list[] = {
   },
 #endif
 
-#ifdef CONFIG_CLI_CTRL_ENABLE
-  {
-    .name     = "cli",
-    .type     = REG_CLI_CTRL,
-    .init_fn  = CliCtrl_Init,
-    .done_fn  = CliCtrl_Done,
-    .run_fn   = CliCtrl_Run,
-    .send_fn  = CliCtrl_Send,
-    .get_fn   = NULL,
-  },
-#endif
-
 #ifdef CONFIG_SENSOR_CTRL_ENABLE
   {
     .name     = "sensor",
@@ -196,6 +184,18 @@ static mgr_reg_t mgr_reg_list[] = {
     .done_fn  = TemplateCtrl_Done,
     .run_fn   = TemplateCtrl_Run,
     .send_fn  = TemplateCtrl_Send,
+    .get_fn   = NULL,
+  },
+#endif
+
+#ifdef CONFIG_CLI_CTRL_ENABLE
+  {
+    .name     = "cli",
+    .type     = REG_CLI_CTRL,
+    .init_fn  = CliCtrl_Init,
+    .done_fn  = CliCtrl_Done,
+    .run_fn   = CliCtrl_Run,
+    .send_fn  = CliCtrl_Send,
     .get_fn   = NULL,
   },
 #endif
