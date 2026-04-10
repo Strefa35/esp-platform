@@ -38,4 +38,35 @@ menu "MAIN"
         default 4 if MAIN_LOG_DEFAULT_LEVEL_DEBUG
         default 5 if MAIN_LOG_DEFAULT_LEVEL_VERBOSE
 
+    config MAIN_MEMORY_SNAPSHOT_ENABLE
+        bool "Enable memory snapshot logs"
+        default n
+        help
+            Enable heap snapshot logging at selected checkpoints.
+
+    config MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
+        bool "Enable periodic memory monitor task"
+        default n
+        depends on MAIN_MEMORY_SNAPSHOT_ENABLE
+        help
+            Start a background task that logs memory usage periodically.
+
+    config MAIN_MEMORY_MONITOR_PERIOD_MS
+        int "Memory monitor period [ms]"
+        range 1000 600000
+        default 10000
+        depends on MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
+
+    config MAIN_MEMORY_MONITOR_TASK_STACK
+        int "Memory monitor task stack [bytes]"
+        range 2048 8192
+        default 3072
+        depends on MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
+
+    config MAIN_MEMORY_MONITOR_TASK_PRIORITY
+        int "Memory monitor task priority"
+        range 1 10
+        default 2
+        depends on MAIN_MEMORY_PERIODIC_MONITOR_ENABLE
+
 endmenu

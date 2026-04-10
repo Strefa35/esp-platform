@@ -35,7 +35,7 @@
 #define SENSOR_TASK_STACK_SIZE        4096
 #define SENSOR_TASK_PRIORITY          12
 
-#define SENSOR_MSG_MAX                10
+#define SENSOR_MSG_MAX                8
 
 
 static const char* TAG = "ESP::SENSOR";
@@ -220,8 +220,16 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
       if (sensor->set) {
         result = sensor->set(data, response);
         ESP_LOGD(TAG, "[%s] OP_TYPE_SET:", __func__);
-        ESP_LOGD(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(data));
-        ESP_LOGD(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(response));
+        char *dump = cJSON_PrintUnformatted(data);
+        if (dump) {
+          ESP_LOGD(TAG, "[%s] '%s'", __func__, dump);
+          cJSON_free(dump);
+        }
+        dump = cJSON_PrintUnformatted(response);
+        if (dump) {
+          ESP_LOGD(TAG, "[%s] '%s'", __func__, dump);
+          cJSON_free(dump);
+        }
       }
       break;
     }
@@ -229,8 +237,16 @@ static esp_err_t useSensor(const char* name, const char* op_str, const cJSON* da
       if (sensor->get) {
         result = sensor->get(data, response);
         ESP_LOGD(TAG, "[%s] OP_TYPE_GET:", __func__);
-        ESP_LOGD(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(data));
-        ESP_LOGD(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(response));
+        char *dump = cJSON_PrintUnformatted(data);
+        if (dump) {
+          ESP_LOGD(TAG, "[%s] '%s'", __func__, dump);
+          cJSON_free(dump);
+        }
+        dump = cJSON_PrintUnformatted(response);
+        if (dump) {
+          ESP_LOGD(TAG, "[%s] '%s'", __func__, dump);
+          cJSON_free(dump);
+        }
       }
       break;
     }
@@ -306,7 +322,7 @@ static esp_err_t parseMqttData(const char* json_str) {
       } else {
         result = publishError("Bad format");
       }
-      ESP_LOGE(TAG, "[%s] '%s'", __func__, cJSON_PrintUnformatted(root));
+      ESP_LOGE(TAG, "[%s] '%s'", __func__, json_str);
     }
     cJSON_Delete(root);
   }

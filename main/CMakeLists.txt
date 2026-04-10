@@ -5,6 +5,7 @@ message(STATUS "=========| MAIN |==================================")
 #####################################
 set(SOURCE_LIST
   main.c 
+  mem_check.c
   nvs_ctrl.c
   mgr_ctrl.c
   tools.c

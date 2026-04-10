@@ -78,7 +78,9 @@ idf.py menuconfig
 
 - From esp-idf folder do below command: `. ./export.sh` to export 
 
-For detailed build and compilation instructions, see [docs/build.md](docs/build.md)
+For detailed build and compilation instructions, see [docs/build.md](docs/build.md).
+
+For **runtime heap snapshot logging** (optional `mem_check` module, menuconfig, and serial log format), see [docs/memory.md](docs/memory.md). To turn a capture into Markdown tables of approximate per-module deltas, see [docs/parse_mem_log.md](docs/parse_mem_log.md).
 
 ### Configuration esp-platform
 - `idf.py menuconfig`

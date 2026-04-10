@@ -32,7 +32,7 @@
 #define CLI_TASK_STACK_SIZE     4096
 #define CLI_TASK_PRIORITY       12
 
-#define CLI_MSG_MAX             10
+#define CLI_MSG_MAX             8
 
 #if CONFIG_CLI_CTRL_ENABLE
 #if !CONFIG_CLI_CTRL_REPL_STACK_SIZE
