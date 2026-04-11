@@ -19,10 +19,15 @@
 /**
  * @brief Build the main screen on the active LVGL screen for @p display.
  *
- * @param display            Active LVGL display.
- * @param on_config_pressed  Optional settings-button callback; NULL if unused.
+ * @param display               Active LVGL display.
+ * @param on_config_pressed     Optional settings-button callback; NULL if unused.
+ * @param on_eth_icon_pressed   Optional Ethernet status-icon click; NULL if unused.
+ * @param on_wifi_icon_pressed  Optional Wi-Fi status-icon click; NULL if unused.
  */
-void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_pressed);
+void ui_main_screen_create(lv_display_t* display,
+                           lv_event_cb_t on_config_pressed,
+                           lv_event_cb_t on_eth_icon_pressed,
+                           lv_event_cb_t on_wifi_icon_pressed);
 
 /**
  * @brief Update digital clock and date labels from formatted strings.

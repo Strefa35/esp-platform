@@ -108,7 +108,7 @@ static void lcdctrl_ApplyWifiEvent(data_wifi_event_e event_id) {
   }
   if (update) {
     lcd_update_t u = {0};
-    u.u.d_bool[1] = connected;
+    u.u.d_bool[0] = connected;
     lcd_UpdateData(LCD_MASK_WIFI_CONNECTED, &u);
   }
   ESP_LOGI(TAG, "--%s() - update: %d, connected: %d", __func__, update, connected);
@@ -140,7 +140,7 @@ static void lcdctrl_ApplyMqttEvent(data_mqtt_event_e event_id) {
   }
   if (update) {
     lcd_update_t u = {0};
-    u.u.d_bool[2] = connected;
+    u.u.d_bool[0] = connected;
     lcd_UpdateData(LCD_MASK_MQTT_CONNECTED, &u);
   }
   ESP_LOGI(TAG, "--%s() - update: %d, connected: %d", __func__, update, connected);
@@ -179,21 +179,23 @@ static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
     }
     case MSG_TYPE_MGR_UID: {
       lcd_update_t u = {0};
-      strncpy(u.uid, msg->payload.mgr.uid, sizeof(u.uid) - 1);
-      u.uid[sizeof(u.uid) - 1] = '\0';
-      lcd_UpdateData(LCD_MASK_UID, &u);
+      strncpy(u.u.d_string, msg->payload.mgr.uid, sizeof(u.u.d_string) - 1);
+      u.u.d_string[sizeof(u.u.d_string) - 1] = '\0';
+      lcd_UpdateData(LCD_MASK_BOARD_UID, &u);
       break;
     }
     case MSG_TYPE_ETH_MAC: {
       lcd_update_t u = {0};
       memcpy(u.u.d_uint8, msg->payload.eth.u.mac, 6);
-      lcd_UpdateData(LCD_MASK_MAC, &u);
+      lcd_UpdateData(LCD_MASK_ETH_MAC, &u);
       break;
     }
     case MSG_TYPE_ETH_IP: {
       lcd_update_t u = {0};
-      u.ip = msg->payload.eth.u.info.ip;
-      lcd_UpdateData(LCD_MASK_IP, &u);
+      u.u.d_uint32[0] = msg->payload.eth.u.info.ip;
+      u.u.d_uint32[1] = msg->payload.eth.u.info.mask;
+      u.u.d_uint32[2] = msg->payload.eth.u.info.gw;
+      lcd_UpdateData(LCD_MASK_ETH_IP | LCD_MASK_ETH_NETMASK | LCD_MASK_ETH_GW, &u);
       break;
     }
 
@@ -204,8 +206,17 @@ static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
 
     case MSG_TYPE_WIFI_IP: {
       lcd_update_t u = {0};
-      u.ip = msg->payload.wifi.u.ip_info.ip;
-      lcd_UpdateData(LCD_MASK_IP, &u);
+      u.u.d_uint32[0] = msg->payload.wifi.u.ip_info.ip;
+      u.u.d_uint32[1] = msg->payload.wifi.u.ip_info.mask;
+      u.u.d_uint32[2] = msg->payload.wifi.u.ip_info.gw;
+      lcd_UpdateData(LCD_MASK_WIFI_IP | LCD_MASK_WIFI_NETMASK | LCD_MASK_WIFI_GW, &u);
+      break;
+    }
+
+    case MSG_TYPE_WIFI_MAC: {
+      lcd_update_t u = {0};
+      memcpy(u.u.d_uint8, msg->payload.wifi.u.mac, 6);
+      lcd_UpdateData(LCD_MASK_WIFI_MAC, &u);
       break;
     }
 

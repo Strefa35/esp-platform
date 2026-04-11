@@ -26,10 +26,12 @@
   _type == MSG_TYPE_ETH_IP                    ? "MSG_TYPE_ETH_IP"                 : \
   _type == MSG_TYPE_WIFI_EVENT                ? "MSG_TYPE_WIFI_EVENT"             : \
   _type == MSG_TYPE_WIFI_IP                   ? "MSG_TYPE_WIFI_IP"                : \
+  _type == MSG_TYPE_WIFI_MAC                  ? "MSG_TYPE_WIFI_MAC"               : \
   _type == MSG_TYPE_WIFI_SCAN_REQ             ? "MSG_TYPE_WIFI_SCAN_REQ"          : \
   _type == MSG_TYPE_WIFI_SCAN_RESULT          ? "MSG_TYPE_WIFI_SCAN_RESULT"       : \
   _type == MSG_TYPE_WIFI_CONNECT              ? "MSG_TYPE_WIFI_CONNECT"           : \
   _type == MSG_TYPE_WIFI_DISCONNECT           ? "MSG_TYPE_WIFI_DISCONNECT"        : \
+  _type == MSG_TYPE_WIFI_CTRL_GOT_IP          ? "MSG_TYPE_WIFI_CTRL_GOT_IP"       : \
   _type == MSG_TYPE_MQTT_START                ? "MSG_TYPE_MQTT_START"             : \
   _type == MSG_TYPE_MQTT_STOP                 ? "MSG_TYPE_MQTT_STOP"              : \
   _type == MSG_TYPE_MQTT_EVENT                ? "MSG_TYPE_MQTT_EVENT"             : \

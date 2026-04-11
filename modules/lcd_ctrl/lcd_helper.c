@@ -8,6 +8,7 @@
  * @copyright Copyright (c) 2025 4Embedded.Systems
  * 
  */
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,8 +30,11 @@
 #include "lcd_defs.h"
 #include "lcd_helper.h"
 #include "lcd_hw.h"
+
 #include "lvgl.h"
 #include "ns2009.h"
+#include "ui_eth_info_dialog.h"
+#include "ui_wifi_info_dialog.h"
 #include "ui_main_screen.h"
 #include "ui_screensaver.h"
 
@@ -49,24 +53,52 @@
 #define LCD_BRIGHTNESS_SAVER_PCT     10
 #define LCD_TOUCH_STABLE_SAMPLES     3
 
+typedef uint8_t lcd_mac_t[6];
+typedef char    lcd_str_t[16];
+
+
+typedef struct {
+  lcd_mac_t mac;
+  lcd_str_t uid;
+} lcd_board_data_t;
+
+typedef struct {
+  bool      connected;
+  uint32_t  ip;
+  uint32_t  netmask;
+  uint32_t  gw;
+  lcd_mac_t mac;
+} lcd_ip_data_t;
+
+typedef struct {
+  bool      connected;
+} lcd_mqtt_data_t;
+
+typedef struct {
+  bool      connected;
+} lcd_bt_data_t;
+
+typedef struct {
+  uint32_t  lux;
+  uint32_t  threshold;
+} lcd_ambient_data_t;
+
 typedef struct {
   uint32_t update; /* Last lcd_UpdateData() mask argument */
   uint32_t mask;   /* Accumulated mask (fields ever updated) */
 
-  bool     eth_connected;
-  bool     wifi_connected;
-  bool     mqtt_connected;
-  bool     bt_connected;
-  uint32_t ambient_lux;
-  uint32_t ambient_threshold_lux;
+  lcd_board_data_t board;
+
+  lcd_ip_data_t   eth;
+  lcd_ip_data_t   wifi;
+
+  lcd_mqtt_data_t mqtt;
+
+  lcd_bt_data_t   bt;
+
+  lcd_ambient_data_t ambient;
+
 } lcd_data_t;
-
-typedef struct {
-  char uid[32];
-  char mac[24];
-  char ip[24];
-} lcd_runtime_data_t;
-
 
 static lcd_t s_lcd = {
   .h_res = 0,
@@ -74,12 +106,6 @@ static lcd_t s_lcd = {
   .buffer_size = 0,
   .buffer1 = NULL,
   .buffer2 = NULL,
-};
-
-static lcd_runtime_data_t s_runtime = {
-  .uid = "ESP/------",
-  .mac = "--:--:--:--:--:--",
-  .ip = "0.0.0.0",
 };
 
 static const char* TAG = "ESP::LCD::HELPER";
@@ -102,17 +128,93 @@ static bool s_touch_was_pressed = false;
 static uint8_t s_touch_press_stable_cnt = 0;
 static int32_t s_last_idle_log_s = -1;
 
-/* Aggregated UI state (connection flags, ambient): lcd_UpdateData writes, LVGL timer reads */
 static lcd_data_t s_data = {
   .update = 0,
   .mask = 0,
-  .eth_connected = false,
-  .wifi_connected = false,
-  .mqtt_connected = false,
-  .bt_connected = false,
-  .ambient_lux = 0,
-  .ambient_threshold_lux = 500,
+
+  .board = {
+    .uid = {0},
+    .mac = {0},
+  },
+
+  .eth = {
+    .connected = false,
+    .ip = 0,
+    .netmask = 0,
+    .gw = 0,
+    .mac = {0},
+  },
+
+  .wifi = {
+    .connected = false,
+    .ip = 0,
+    .netmask = 0,
+    .gw = 0,
+    .mac = {0},
+  },
+
+  .mqtt = {
+    .connected = false,
+  },
+
+  .bt = {
+    .connected = false,
+  },
+
+  .ambient = {
+    .lux = 0,
+    .threshold = 0,
+  },
 };
+
+static void lcd_format_ipv4_ui(char* dst, size_t len, uint32_t addr) {
+  if (addr == 0) {
+    snprintf(dst, len, "---");
+    return;
+  }
+  esp_ip4_addr_t ip = { .addr = addr };
+  snprintf(dst, len, IPSTR, IP2STR(&ip));
+}
+
+static void lcd_format_mac_ui(char* dst, size_t len, const uint8_t mac[6]) {
+  snprintf(dst, len, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+}
+
+/**
+ * @brief Touch on the Ethernet status icon: open the info dialog from merged `lcd_data_t`.
+ */
+static void lcd_eth_icon_event(lv_event_t* e) {
+  (void) e;
+  ui_eth_info_dialog_data_t d;
+  memset(&d, 0, sizeof(d));
+  if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    lcd_format_ipv4_ui(d.ip, sizeof(d.ip), s_data.eth.ip);
+    lcd_format_ipv4_ui(d.netmask, sizeof(d.netmask), s_data.eth.netmask);
+    lcd_format_ipv4_ui(d.gateway, sizeof(d.gateway), s_data.eth.gw);
+    lcd_format_mac_ui(d.mac, sizeof(d.mac), s_data.eth.mac);
+    d.link_up = s_data.eth.connected;
+    xSemaphoreGive(s_state_mutex);
+  }
+  ui_eth_info_dialog_show(&d);
+}
+
+/**
+ * @brief Touch on the Wi-Fi status icon: open the info dialog from merged `lcd_data_t`.
+ */
+static void lcd_wifi_icon_event(lv_event_t* e) {
+  (void) e;
+  ui_wifi_info_dialog_data_t d;
+  memset(&d, 0, sizeof(d));
+  if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    lcd_format_ipv4_ui(d.ip, sizeof(d.ip), s_data.wifi.ip);
+    lcd_format_ipv4_ui(d.netmask, sizeof(d.netmask), s_data.wifi.netmask);
+    lcd_format_ipv4_ui(d.gateway, sizeof(d.gateway), s_data.wifi.gw);
+    lcd_format_mac_ui(d.mac, sizeof(d.mac), s_data.wifi.mac);
+    d.link_up = s_data.wifi.connected;
+    xSemaphoreGive(s_state_mutex);
+  }
+  ui_wifi_info_dialog_show(&d);
+}
 
 /**
  * @brief Set panel backlight brightness via the hardware layer (logs on failure).
@@ -139,9 +241,11 @@ static void lcd_switch_screen(lcd_screen_t screen) {
   lcd_screen_t prev_screen = s_active_screen;
 
   if (screen == LCD_SCREEN_MAIN) {
-    ui_main_screen_create(s_display, NULL);
+    ui_main_screen_create(s_display, NULL, lcd_eth_icon_event, lcd_wifi_icon_event);
     lcd_set_backlight(LCD_BRIGHTNESS_MAIN_PCT);
   } else {
+    ui_eth_info_dialog_close_if_open();
+    ui_wifi_info_dialog_close_if_open();
     ui_screensaver_create(s_display);
     lcd_set_backlight(LCD_BRIGHTNESS_SAVER_PCT);
   }
@@ -273,12 +377,12 @@ static void lcd_ui_update_timer_cb(lv_timer_t* timer) {
   uint32_t lux = 0;
   uint32_t th = 500;
   if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    eth   = s_data.eth_connected;
-    wifi  = s_data.wifi_connected;
-    mqtt  = s_data.mqtt_connected;
-    bt    = s_data.bt_connected;
-    lux   = s_data.ambient_lux;
-    th    = s_data.ambient_threshold_lux;
+    eth   = s_data.eth.connected;
+    wifi  = s_data.wifi.connected;
+    mqtt  = s_data.mqtt.connected;
+    bt    = s_data.bt.connected;
+    lux   = s_data.ambient.lux;
+    th    = s_data.ambient.threshold;
     xSemaphoreGive(s_state_mutex);
   }
 
@@ -414,8 +518,8 @@ static esp_err_t lcd_InitLvgl(lcd_t* lcd_ptr) {
 /**
  * @brief Apply batched UI field updates under the state mutex (safe from the message task).
  *
- * For connection masks, set `d_bool[0]…[3]` in mask bit order (ETH, Wi-Fi, MQTT, BT).
- * UID, MAC, IP, and ambient fields: see `lcd_update_t` and `LCD_MASK_*` in lcd_helper.h.
+ * Connection flags: each of `LCD_MASK_ETH_CONNECTED`, `LCD_MASK_WIFI_CONNECTED`, `LCD_MASK_MQTT_CONNECTED`, `LCD_MASK_BT_CONNECTED` uses `u.d_bool[0]` for that update.
+ * Board / Ethernet / Wi-Fi / MQTT / BT / ambient fields: see `lcd_update_t` and `LCD_MASK_*` in lcd_helper.h.
  *
  * @param mask   OR of `LCD_MASK_*` bits selecting which fields in @p update are valid.
  * @param update Snapshot of values to merge into shared UI state.
@@ -425,39 +529,58 @@ void lcd_UpdateData(const uint32_t mask, const lcd_update_t* update) {
     return;
   }
   if (xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+    if (mask & LCD_MASK_BOARD_MAC) {
+      memcpy(s_data.board.mac, update->u.d_uint8, sizeof(s_data.board.mac));
+    }
+    if (mask & LCD_MASK_BOARD_UID) {
+      strncpy(s_data.board.uid, update->u.d_string, sizeof(s_data.board.uid) - 1);
+      s_data.board.uid[sizeof(s_data.board.uid) - 1] = '\0';
+    }
+
     if (mask & LCD_MASK_ETH_CONNECTED) {
-      s_data.eth_connected = update->u.d_bool[0];
+      s_data.eth.connected = update->u.d_bool[0];
     }
     if (mask & LCD_MASK_WIFI_CONNECTED) {
-      s_data.wifi_connected = update->u.d_bool[1];
+      s_data.wifi.connected = update->u.d_bool[0];
     }
     if (mask & LCD_MASK_MQTT_CONNECTED) {
-      s_data.mqtt_connected = update->u.d_bool[2];
+      s_data.mqtt.connected = update->u.d_bool[0];
     }
     if (mask & LCD_MASK_BT_CONNECTED) {
-      s_data.bt_connected = update->u.d_bool[3];
+      s_data.bt.connected = update->u.d_bool[0];
+    }
+
+    if (mask & LCD_MASK_ETH_IP) {
+      s_data.eth.ip = update->u.d_uint32[0];
+    }
+    if (mask & LCD_MASK_ETH_NETMASK) {
+      s_data.eth.netmask = update->u.d_uint32[1];
+    }
+    if (mask & LCD_MASK_ETH_GW) {
+      s_data.eth.gw = update->u.d_uint32[2];
+    }
+    if (mask & LCD_MASK_ETH_MAC) {
+      memcpy(s_data.eth.mac, update->u.d_uint8, sizeof(s_data.eth.mac));
+    }
+
+    if (mask & LCD_MASK_WIFI_IP) {
+      s_data.wifi.ip = update->u.d_uint32[0];
+    }
+    if (mask & LCD_MASK_WIFI_NETMASK) {
+      s_data.wifi.netmask = update->u.d_uint32[1];
+    }
+    if (mask & LCD_MASK_WIFI_GW) {
+      s_data.wifi.gw = update->u.d_uint32[2];
+    }
+    if (mask & LCD_MASK_WIFI_MAC) {
+      memcpy(s_data.wifi.mac, update->u.d_uint8, sizeof(s_data.wifi.mac));
     }
 
     if (mask & LCD_MASK_AMBIENT_LUX) {
-      s_data.ambient_lux = update->u.d_uint32[0];
+      s_data.ambient.lux = update->u.d_uint32[0];
     }
     if (mask & LCD_MASK_AMBIENT_THRESHOLD) {
-      s_data.ambient_threshold_lux = update->u.d_uint32[1];
-    }
-
-    if (mask & LCD_MASK_UID) {
-      snprintf(s_runtime.uid, sizeof(s_runtime.uid), "%s", update->uid);
-    }
-    if (mask & LCD_MASK_MAC) {
-      snprintf(s_runtime.mac, sizeof(s_runtime.mac), "%02X:%02X:%02X:%02X:%02X:%02X",
-               update->u.d_uint8[0], update->u.d_uint8[1], update->u.d_uint8[2],
-               update->u.d_uint8[3], update->u.d_uint8[4], update->u.d_uint8[5]);
-    }
-    if (mask & LCD_MASK_IP) {
-      if (update->ip != 0) {
-        esp_ip4_addr_t ip = { .addr = update->ip };
-        snprintf(s_runtime.ip, sizeof(s_runtime.ip), IPSTR, IP2STR(&ip));
-      }
+      s_data.ambient.threshold = update->u.d_uint32[1];
     }
 
     s_data.update = mask;
@@ -465,6 +588,24 @@ void lcd_UpdateData(const uint32_t mask, const lcd_update_t* update) {
 
     xSemaphoreGive(s_state_mutex);
   }
+}
+
+bool lcd_GetEthLinkConnected(void) {
+  bool up = false;
+  if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+    up = s_data.eth.connected;
+    xSemaphoreGive(s_state_mutex);
+  }
+  return up;
+}
+
+bool lcd_GetWifiLinkConnected(void) {
+  bool up = false;
+  if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+    up = s_data.wifi.connected;
+    xSemaphoreGive(s_state_mutex);
+  }
+  return up;
 }
 
 /**

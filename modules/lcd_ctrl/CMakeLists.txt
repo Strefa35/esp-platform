@@ -11,6 +11,8 @@ set(SOURCE_LIST
   ns2009.c
   fonts/lv_font_material_icons_22.c
   ui/ui_main_screen.c
+  ui/ui_eth_info_dialog.c
+  ui/ui_wifi_info_dialog.c
   ui/ui_screensaver.c
 )
 

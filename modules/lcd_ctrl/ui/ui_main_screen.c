@@ -260,9 +260,14 @@ static void add_relay_section(lv_obj_t* parent,
  * @brief Build the main screen on the display's active screen (status bar, clock, lux, relays).
  *
  * @param display            Active LVGL display.
- * @param on_config_pressed  Optional click handler for the settings button; NULL disables the callback.
+ * @param on_config_pressed      Optional click handler for the settings button; NULL disables the callback.
+ * @param on_eth_icon_pressed    Optional click handler for the Ethernet icon; NULL disables the callback.
+ * @param on_wifi_icon_pressed  Optional click handler for the Wi-Fi icon; NULL disables the callback.
  */
-void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_pressed) {
+void ui_main_screen_create(lv_display_t* display,
+                           lv_event_cb_t on_config_pressed,
+                           lv_event_cb_t on_eth_icon_pressed,
+                           lv_event_cb_t on_wifi_icon_pressed) {
   lv_obj_t* scr = lv_display_get_screen_active(display);
   lv_obj_clean(scr);
 
@@ -289,6 +294,8 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_layout(scr, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(scr, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(scr, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  /* Default lv_obj is scrollable; keep the main layout fixed (status bar must not move on drag). */
+  lv_obj_remove_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
 
   /* --- Status bar: top strip, full width, accent bottom border --- */
   lv_obj_t* status_bar = lv_obj_create(scr);
@@ -306,6 +313,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_flex_align(status_bar, LV_FLEX_ALIGN_SPACE_BETWEEN,
                                      LV_FLEX_ALIGN_CENTER,
                                      LV_FLEX_ALIGN_CENTER);
+  lv_obj_remove_flag(status_bar, LV_OBJ_FLAG_SCROLLABLE);
 
   /* Row of four status labels (stored in s_icon_* for later color updates). */
   lv_obj_t* icons = lv_obj_create(status_bar);
@@ -315,16 +323,27 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_flex_align(icons, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(icons, 16, 0);
   lv_obj_set_size(icons, LV_SIZE_CONTENT, LV_PCT(100));
+  lv_obj_remove_flag(icons, LV_OBJ_FLAG_SCROLLABLE);
 
   s_icon_eth = lv_label_create(icons);
   lv_label_set_text(s_icon_eth, MAT_ICON_LAN);
   apply_material_icon_font(s_icon_eth);
   set_status_icon_color(s_icon_eth, false);
+  if (on_eth_icon_pressed != NULL) {
+    lv_obj_add_flag(s_icon_eth, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_pad_all(s_icon_eth, 6, 0);
+    lv_obj_add_event_cb(s_icon_eth, on_eth_icon_pressed, LV_EVENT_CLICKED, NULL);
+  }
 
   s_icon_wifi = lv_label_create(icons);
   lv_label_set_text(s_icon_wifi, MAT_ICON_WIFI);
   apply_material_icon_font(s_icon_wifi);
   set_status_icon_color(s_icon_wifi, false);
+  if (on_wifi_icon_pressed != NULL) {
+    lv_obj_add_flag(s_icon_wifi, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_pad_all(s_icon_wifi, 6, 0);
+    lv_obj_add_event_cb(s_icon_wifi, on_wifi_icon_pressed, LV_EVENT_CLICKED, NULL);
+  }
 
   s_icon_mqtt = lv_label_create(icons);
   lv_label_set_text(s_icon_mqtt, MAT_ICON_CLOUD);
@@ -338,6 +357,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
 
   /* Settings control: gear icon; optional LV_EVENT_CLICKED -> on_config_pressed. */
   lv_obj_t* cfg_btn = lv_button_create(status_bar);
+  lv_obj_remove_flag(cfg_btn, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_size(cfg_btn, 32, 26);
   lv_obj_set_style_bg_color(cfg_btn, lv_color_hex(COLOR_BTN_BG), 0);
   lv_obj_set_style_bg_opa(cfg_btn, LV_OPA_COVER, 0);
@@ -364,6 +384,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_flex_flow(body, LV_FLEX_FLOW_ROW);
   /* LVGL flex has no STRETCH; children use LV_PCT(100) height to fill this row. */
   lv_obj_set_flex_align(body, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
+  lv_obj_remove_flag(body, LV_OBJ_FLAG_SCROLLABLE);
 
   /* Left column: clock + date upper area, flexible empty middle, lux UI pinned toward bottom. */
   lv_obj_t* left = lv_obj_create(body);
@@ -372,6 +393,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_layout(left, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(left, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
+  lv_obj_remove_flag(left, LV_OBJ_FLAG_SCROLLABLE);
   // lv_obj_set_style_pad_left(left, 6, 0);
   // lv_obj_set_style_pad_right(left, 4, 0);
   // lv_obj_set_style_pad_top(left, LEFT_COL_PAD_TOP, 0);
@@ -381,12 +403,14 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_t* clock_area = lv_obj_create(left);
   lv_obj_remove_style_all(clock_area);
   lv_obj_set_width(clock_area, LV_PCT(100));
-  lv_obj_set_height(clock_area, LV_PCT(100));
+  /* Content-sized: 100% height plus flex-grow spacer below overflowed the column and enabled child scroll/drag. */
+  lv_obj_set_height(clock_area, LV_SIZE_CONTENT);
   lv_obj_set_layout(clock_area, LV_LAYOUT_FLEX);
   lv_obj_set_flex_flow(clock_area, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(clock_area, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_row(clock_area, 6, 0);
   lv_obj_add_flag(clock_area, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_remove_flag(clock_area, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t* time_row = lv_obj_create(clock_area);
   lv_obj_remove_style_all(time_row);
@@ -395,6 +419,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_flex_align(time_row, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(time_row, 0, 0);
   lv_obj_add_flag(time_row, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+  lv_obj_remove_flag(time_row, LV_OBJ_FLAG_SCROLLABLE);
 
   /* Three labels so hour:minute and seconds can use different font sizes if enabled. */
   s_lbl_hm = lv_label_create(time_row);
@@ -418,6 +443,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_width(spacer, LV_PCT(100));
   lv_obj_set_height(spacer, 0);
   lv_obj_set_flex_grow(spacer, 1);
+  lv_obj_remove_flag(spacer, LV_OBJ_FLAG_SCROLLABLE);
 
   /* Ambient light: caption, icon + numeric readout, gradient bar with movable markers. */
   lv_obj_t* lux_col = lv_obj_create(left);
@@ -428,6 +454,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_flex_flow(lux_col, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_flex_align(lux_col, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_row(lux_col, 4, 0);
+  lv_obj_remove_flag(lux_col, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t* amb = lv_label_create(lux_col);
   lv_label_set_text(amb, "Ambient (lx)");
@@ -442,6 +469,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_flex_flow(lux_info_row, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(lux_info_row, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
   lv_obj_set_style_pad_column(lux_info_row, 6, 0);
+  lv_obj_remove_flag(lux_info_row, LV_OBJ_FLAG_SCROLLABLE);
 
   lv_obj_t* sun = lv_label_create(lux_info_row);
   lv_label_set_text(sun, MAT_ICON_WB_SUNNY);
@@ -455,6 +483,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_set_flex_align(lux_txt_col, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_START);
   lv_obj_set_style_pad_row(lux_txt_col, 0, 0);
   lv_obj_set_flex_grow(lux_txt_col, 0);
+  lv_obj_remove_flag(lux_txt_col, LV_OBJ_FLAG_SCROLLABLE);
 
   /* s_lux_value_text / s_lux_thresh_text updated by ui_main_screen_update_ambient_lux(). */
   s_lux_value_text = lv_label_create(lux_txt_col);
@@ -469,6 +498,7 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_config_presse
   lv_obj_remove_style_all(s_lux_track);
   lv_obj_set_flex_grow(s_lux_track, 1);
   lv_obj_set_height(s_lux_track, LUX_TRACK_H);
+  lv_obj_remove_flag(s_lux_track, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_bg_opa(s_lux_track, LV_OPA_COVER, 0);
   lv_obj_set_style_bg_color(s_lux_track, lv_color_hex(COLOR_LUX_LEFT), 0);
   lv_obj_set_style_bg_grad_color(s_lux_track, lv_color_hex(COLOR_LUX_RIGHT), 0);
