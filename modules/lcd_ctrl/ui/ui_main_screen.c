@@ -93,6 +93,70 @@ static void apply_material_icon_font(lv_obj_t* obj) {
 }
 
 /**
+ * @brief Create a fixed-size status-bar icon slot with a centered Material icon.
+ *
+ * Using a dedicated button-sized slot keeps the touch hitbox aligned with the
+ * visible icon, unlike a raw clickable label whose text bounds can feel offset.
+ *
+ * @param parent   Parent row in the status bar.
+ * @param symbol   Material icon glyph string.
+ * @param on_press Optional click callback; NULL creates a non-clickable slot.
+ * @return lv_obj_t* Inner label used later for tint updates.
+ */
+static lv_obj_t* make_status_icon_slot(lv_obj_t* parent, const char* symbol, lv_event_cb_t on_press) {
+  static const lv_style_prop_t transition_props[] = {
+    LV_STYLE_BG_OPA,
+    LV_STYLE_BORDER_WIDTH,
+    LV_STYLE_OUTLINE_WIDTH,
+    0
+  };
+  static lv_style_transition_dsc_t transition_dsc;
+  static bool transition_ready = false;
+
+  if (!transition_ready) {
+    lv_style_transition_dsc_init(&transition_dsc, transition_props, lv_anim_path_ease_out, 120, 0, NULL);
+    transition_ready = true;
+  }
+
+  lv_obj_t* slot = lv_button_create(parent);
+  lv_obj_remove_flag(slot, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_size(slot, 40, 32);
+  lv_obj_set_style_radius(slot, 6, 0);
+  lv_obj_set_style_pad_all(slot, 0, 0);
+  lv_obj_set_style_shadow_width(slot, 0, 0);
+  lv_obj_set_style_transition(slot, &transition_dsc, LV_PART_MAIN);
+
+  /* Default state: visually quiet, but still a real pressable control. */
+  lv_obj_set_style_bg_opa(slot, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_width(slot, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_outline_width(slot, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+  /* Pressed state: subtle feedback matching the rest of the UI. */
+  lv_obj_set_style_bg_color(slot, lv_color_hex(COLOR_BTN_BG), LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_set_style_bg_opa(slot, LV_OPA_60, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_set_style_border_color(slot, lv_color_hex(COLOR_ACCENT), LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_set_style_border_width(slot, 1, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_set_style_outline_color(slot, lv_color_hex(COLOR_ACCENT), LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_set_style_outline_opa(slot, LV_OPA_50, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_set_style_outline_width(slot, 1, LV_PART_MAIN | LV_STATE_PRESSED);
+
+  if (on_press != NULL) {
+    /* Resistive touch can jitter during release, so react on press and keep the
+     * target locked even if the finger slides slightly. */
+    lv_obj_add_flag(slot, LV_OBJ_FLAG_PRESS_LOCK);
+    lv_obj_add_event_cb(slot, on_press, LV_EVENT_PRESSED, NULL);
+  } else {
+    lv_obj_remove_flag(slot, LV_OBJ_FLAG_CLICKABLE);
+  }
+
+  lv_obj_t* icon = lv_label_create(slot);
+  lv_label_set_text(icon, symbol);
+  apply_material_icon_font(icon);
+  lv_obj_center(icon);
+  return icon;
+}
+
+/**
  * @brief Set Montserrat fonts on the digital clock labels when enabled in LVGL config.
  */
 static void apply_clock_fonts(void) {
@@ -325,34 +389,16 @@ void ui_main_screen_create(lv_display_t* display,
   lv_obj_set_size(icons, LV_SIZE_CONTENT, LV_PCT(100));
   lv_obj_remove_flag(icons, LV_OBJ_FLAG_SCROLLABLE);
 
-  s_icon_eth = lv_label_create(icons);
-  lv_label_set_text(s_icon_eth, MAT_ICON_LAN);
-  apply_material_icon_font(s_icon_eth);
+  s_icon_eth = make_status_icon_slot(icons, MAT_ICON_LAN, on_eth_icon_pressed);
   set_status_icon_color(s_icon_eth, false);
-  if (on_eth_icon_pressed != NULL) {
-    lv_obj_add_flag(s_icon_eth, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_pad_all(s_icon_eth, 6, 0);
-    lv_obj_add_event_cb(s_icon_eth, on_eth_icon_pressed, LV_EVENT_CLICKED, NULL);
-  }
 
-  s_icon_wifi = lv_label_create(icons);
-  lv_label_set_text(s_icon_wifi, MAT_ICON_WIFI);
-  apply_material_icon_font(s_icon_wifi);
+  s_icon_wifi = make_status_icon_slot(icons, MAT_ICON_WIFI, on_wifi_icon_pressed);
   set_status_icon_color(s_icon_wifi, false);
-  if (on_wifi_icon_pressed != NULL) {
-    lv_obj_add_flag(s_icon_wifi, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_style_pad_all(s_icon_wifi, 6, 0);
-    lv_obj_add_event_cb(s_icon_wifi, on_wifi_icon_pressed, LV_EVENT_CLICKED, NULL);
-  }
 
-  s_icon_mqtt = lv_label_create(icons);
-  lv_label_set_text(s_icon_mqtt, MAT_ICON_CLOUD);
-  apply_material_icon_font(s_icon_mqtt);
+  s_icon_mqtt = make_status_icon_slot(icons, MAT_ICON_CLOUD, NULL);
   set_status_icon_color(s_icon_mqtt, false);
 
-  s_icon_bt = lv_label_create(icons);
-  lv_label_set_text(s_icon_bt, MAT_ICON_BLUETOOTH);
-  apply_material_icon_font(s_icon_bt);
+  s_icon_bt = make_status_icon_slot(icons, MAT_ICON_BLUETOOTH, NULL);
   set_status_icon_color(s_icon_bt, false);
 
   /* Settings control: gear icon; optional LV_EVENT_CLICKED -> on_config_pressed. */

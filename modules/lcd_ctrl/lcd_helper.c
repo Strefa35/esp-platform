@@ -18,6 +18,7 @@
 
 #include "esp_check.h"
 #include "esp_err.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_netif_ip_addr.h"
 #include "esp_timer.h"
@@ -116,6 +117,7 @@ static esp_timer_handle_t s_tick_timer = NULL;
 
 static lv_display_t* s_display = NULL;
 static lv_indev_t* s_touch_indev = NULL;
+static uint8_t* s_rotated_buf = NULL;
 
 typedef enum {
   LCD_SCREEN_MAIN = 0,
@@ -275,14 +277,40 @@ static void lcd_lvgl_tick_cb(void* arg) {
  * @param px_map Pixel buffer in RGB565 format.
  */
 static void lcd_lvgl_flush_cb(lv_display_t* display, const lv_area_t* area, uint8_t* px_map) {
-  uint32_t width = (uint32_t) (area->x2 - area->x1 + 1);
-  uint32_t height = (uint32_t) (area->y2 - area->y1 + 1);
+  const lv_area_t* flush_area = area;
+  uint8_t* flush_map = px_map;
+  lv_area_t rotated_area = *area;
+  lv_display_rotation_t rotation = lv_display_get_rotation(display);
+
+  if (rotation != LV_DISPLAY_ROTATION_0) {
+    if (s_rotated_buf == NULL) {
+      ESP_LOGE(TAG, "rotation buffer is not allocated");
+      lv_display_flush_ready(display);
+      return;
+    }
+
+    lv_color_format_t color_format = lv_display_get_color_format(display);
+    int32_t src_w = lv_area_get_width(area);
+    int32_t src_h = lv_area_get_height(area);
+    uint32_t src_stride = lv_draw_buf_width_to_stride(src_w, color_format);
+
+    lv_display_rotate_area(display, &rotated_area);
+    uint32_t dst_stride = lv_draw_buf_width_to_stride(lv_area_get_width(&rotated_area), color_format);
+    lv_draw_sw_rotate(px_map, s_rotated_buf, src_w, src_h, src_stride, dst_stride, rotation, color_format);
+
+    flush_area = &rotated_area;
+    flush_map = s_rotated_buf;
+  }
+
+  uint32_t width = (uint32_t) lv_area_get_width(flush_area);
+  uint32_t height = (uint32_t) lv_area_get_height(flush_area);
 
   /* SPI panels usually expect RGB565 bytes in opposite order than CPU memory layout. */
-  lv_draw_sw_rgb565_swap(px_map, width * height);
+  lv_draw_sw_rgb565_swap(flush_map, width * height);
 
-  esp_err_t result = lcd_FlushDisplayArea(area->x1, area->y1, area->x2, area->y2, px_map);
+  esp_err_t result = lcd_FlushDisplayArea(flush_area->x1, flush_area->y1, flush_area->x2, flush_area->y2, flush_map);
   if (result != ESP_OK) {
+    ESP_LOGE(TAG, "lcd_FlushDisplayArea failed: %s", esp_err_to_name(result));
     lv_display_flush_ready(display);
   }
 }
@@ -299,6 +327,9 @@ static void lcd_lvgl_flush_done_cb(void* ctx) {
 
 /**
  * @brief Reads current touch state and maps it to LVGL input data.
+ *
+ * The touch device is bound to `s_display`, so LVGL applies the current display
+ * rotation internally during pointer processing.
  *
  * @param indev LVGL input device (unused).
  * @param data LVGL input data to fill.
@@ -487,10 +518,18 @@ static esp_err_t lcd_InitLvgl(lcd_t* lcd_ptr) {
   lv_display_set_rotation(s_display, LV_DISPLAY_ROTATION_0);
 #endif
 
+  if (lv_display_get_rotation(s_display) != LV_DISPLAY_ROTATION_0) {
+    s_rotated_buf = heap_caps_malloc(lcd_ptr->buffer_size, MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
+    if (s_rotated_buf == NULL) {
+      return ESP_ERR_NO_MEM;
+    }
+  }
+
   s_touch_indev = lv_indev_create();
   if (s_touch_indev == NULL) {
     return ESP_FAIL;
   }
+  lv_indev_set_display(s_touch_indev, s_display);
   lv_indev_set_type(s_touch_indev, LV_INDEV_TYPE_POINTER);
   lv_indev_set_read_cb(s_touch_indev, lcd_lvgl_touch_read_cb);
 
@@ -668,6 +707,10 @@ esp_err_t lcd_DoneHelper(void) {
   if (s_lcd.buffer2 != NULL) {
     free(s_lcd.buffer2);
     s_lcd.buffer2 = NULL;
+  }
+  if (s_rotated_buf != NULL) {
+    free(s_rotated_buf);
+    s_rotated_buf = NULL;
   }
 
   lcd_DoneHw();

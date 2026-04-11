@@ -78,6 +78,7 @@
 #define NS2009_I2C_CLK_FREQUENCY       CONFIG_LCD_NS2009_I2C_FREQ_HZ
 
 #define NS2009_TOUCH_THRESHOLD         CONFIG_LCD_NS2009_TOUCH_THRESHOLD
+#define NS2009_TOUCH_THRESHOLD_CAP     120
 
 #define NS2009_RAW_MIN_X               CONFIG_LCD_NS2009_RAW_MIN_X
 #define NS2009_RAW_MAX_X               CONFIG_LCD_NS2009_RAW_MAX_X
@@ -309,7 +310,11 @@ esp_err_t ns2009_GetTouch(ns2009_touch_t* touch) {
 
   if (ns2009_read_reg_u12_avg(NS2009_CMD_READ_Z1, &raw_z1) == ESP_OK) {
 #if CONFIG_LCD_NS2009_REQUIRE_PRESSURE
-    if (raw_z1 < NS2009_TOUCH_THRESHOLD) {
+    uint16_t effective_threshold = NS2009_TOUCH_THRESHOLD;
+    if (effective_threshold > NS2009_TOUCH_THRESHOLD_CAP) {
+      effective_threshold = NS2009_TOUCH_THRESHOLD_CAP;
+    }
+    if (raw_z1 < effective_threshold) {
       return ESP_ERR_NOT_FOUND;
     }
 #endif

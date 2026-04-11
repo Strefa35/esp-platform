@@ -13,12 +13,14 @@ It does **not** implement a captive portal or provisioning UI; those stay in hig
 Open menuconfig: **ESP32 - Platform → WiFi Controller**.
 
 | Option | Meaning |
-|--------|---------|
+| ------ | ------- |
 | **Enable WiFi Controller (STA)** (`CONFIG_WIFI_CTRL_ENABLE`) | Master switch. When disabled, the component is not linked and the `"wifi"` entry is omitted from `mgr_reg_list`. Default: **off**. |
 | **Log level** (`CONFIG_WIFI_CTRL_LOG_LEVEL`) | Compile-time default verbosity for tag `ESP::WIFI`. |
 | **Maximum AP records** (`CONFIG_WIFI_CTRL_SCAN_MAX_AP`) | How many `wifi_ap_record_t` entries are kept after a scan (1–40, default 20). Stronger APs tend to appear first; extra on-air APs are dropped. |
 
 After changing options, rebuild the firmware (`idf.py build`).
+
+> **Checked-in ESP32 defaults:** the repository's current `sdkconfig.defaults` enables `wifi_ctrl`, keeps Wi-Fi logs verbose for bring-up, and raises `CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE` to `4096` so IP / SNTP / app handlers have more stack headroom.
 
 ### ESP-IDF Wi-Fi / PHY options
 
@@ -36,7 +38,7 @@ When `CONFIG_WIFI_CTRL_ENABLE` is set:
 Lifecycle (same pattern as other controllers):
 
 | Phase | Called by MGR | Effect |
-|-------|----------------|--------|
+| ----- | ------------- | ------ |
 | `WifiCtrl_Init` | During `MGR_Init` | `esp_netif_init` / default event loop (no-op if already done), default STA `esp_netif`, `esp_wifi_init`, event handlers, worker task and queue. |
 | `WifiCtrl_Run` | During `MGR_Run` | `WIFI_MODE_STA`, `esp_wifi_start`. |
 | `WifiCtrl_Done` | During `MGR_Done` | Stop STA, stop worker, unregister handlers, `esp_wifi_deinit`, destroy STA netif. |
@@ -98,7 +100,7 @@ If you run **Ethernet and Wi-Fi at the same time**, you will need explicit polic
 1. Fill **`data_wifi_connect_t`** inside **`msg.payload.wifi.u.connect`** and send **`MSG_TYPE_WIFI_CONNECT`** to **`REG_WIFI_CTRL`**:
 
    | Field | Usage |
-   |-------|--------|
+   | ----- | ----- |
    | `ssid` | NUL-terminated string, max **32** characters (buffer is 33 bytes including `'\0'`). |
    | `password` | NUL-terminated; max **64** characters (65-byte buffer). Empty for open networks. |
    | `channel` | **`0`** = leave channel unspecified (normal case). Non-zero fixes the channel hint in `wifi_config_t.sta.channel`. |
@@ -144,7 +146,7 @@ Persisting credentials in **NVS** for the next boot is **not** implemented insid
 ## Outbound messages (Wi-Fi → manager / others)
 
 | Message | `to` | Payload / meaning |
-|---------|------|-------------------|
+| ------- | ---- | ----------------- |
 | `MSG_TYPE_WIFI_EVENT` | `REG_ALL_CTRL` | `payload.wifi.u.event_id`: STA start/stop, connected, disconnected, scan failed. |
 | `MSG_TYPE_WIFI_SCAN_RESULT` | `REG_ALL_CTRL` | `payload.wifi.u.scan.ap_count` — scan done; per-AP data is expected on the message bus (not via extra manager APIs). |
 | `MSG_TYPE_WIFI_IP` | `REG_MGR_CTRL` | `payload.wifi.u.ip_info` — same shape as `MSG_TYPE_ETH_IP`. |
@@ -160,7 +162,7 @@ To get **LCD IP text** from Wi-Fi, either extend **`to`** on **`MSG_TYPE_WIFI_IP
 Handled only in **`WifiCtrl_Send`**:
 
 | `msg.type` | Action |
-|------------|--------|
+| ---------- | ------ |
 | `MSG_TYPE_WIFI_SCAN_REQ` | Queue scan on worker task. |
 | `MSG_TYPE_WIFI_CONNECT` | Apply STA config and connect. |
 | `MSG_TYPE_WIFI_DISCONNECT` | `esp_wifi_disconnect()`. |
@@ -183,7 +185,7 @@ Declared in `modules/wifi_ctrl/include/wifi_ctrl.h`:
 ## Troubleshooting
 
 | Symptom | Things to check |
-|---------|-------------------|
+| ------- | ---------------- |
 | Build does not include Wi-Fi | `CONFIG_WIFI_CTRL_ENABLE=y`, rebuild; `main` must `PRIV_REQUIRES wifi_ctrl` (already conditional in `main/CMakeLists.txt`). |
 | Scan always empty / fails | Antenna, RF calibration, country code, 2.4 GHz only on many ESP32 boards; log level `Debug` on `ESP::WIFI`. |
 | Association fails | Wrong password, wrong **`authmode`**, hidden SSID (may need extra scan config—see ESP-IDF docs), or WPA3-only AP with STA profile mismatch. |
