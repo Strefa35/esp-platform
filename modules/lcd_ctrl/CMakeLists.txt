@@ -13,6 +13,7 @@ set(SOURCE_LIST
   ui/ui_main_screen.c
   ui/ui_eth_info_dialog.c
   ui/ui_wifi_info_dialog.c
+  ui/ui_mqtt_info_dialog.c
   ui/ui_screensaver.c
 )
 

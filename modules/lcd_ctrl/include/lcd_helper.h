@@ -97,4 +97,11 @@ bool lcd_GetEthLinkConnected(void);
  */
 bool lcd_GetWifiLinkConnected(void);
 
+/**
+ * @brief Thread-safe read of MQTT connected flag shown on the LCD status bar / dialogs.
+ *
+ * @return true if the last merged state is connected, false otherwise (or if mutex unavailable).
+ */
+bool lcd_GetMqttLinkConnected(void);
+
 #endif /* __LCD_HELPER_H__ */

@@ -36,6 +36,7 @@
 #include "ns2009.h"
 #include "ui_eth_info_dialog.h"
 #include "ui_wifi_info_dialog.h"
+#include "ui_mqtt_info_dialog.h"
 #include "ui_main_screen.h"
 #include "ui_screensaver.h"
 
@@ -219,6 +220,32 @@ static void lcd_wifi_icon_event(lv_event_t* e) {
 }
 
 /**
+ * @brief Touch on the MQTT status icon: open the info dialog from merged `lcd_data_t`.
+ */
+static void lcd_mqtt_icon_event(lv_event_t* e) {
+  (void) e;
+  ui_mqtt_info_dialog_data_t d;
+  memset(&d, 0, sizeof(d));
+
+  snprintf(d.broker, sizeof(d.broker), "%s", CONFIG_MQTT_CTRL_BROKER_URL);
+
+  if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    d.link_up = s_data.mqtt.connected;
+    strncpy(d.uid, s_data.board.uid, sizeof(d.uid) - 1);
+    d.uid[sizeof(d.uid) - 1] = '\0';
+    xSemaphoreGive(s_state_mutex);
+  }
+
+  if (d.uid[0] != '\0') {
+    snprintf(d.req_topic, sizeof(d.req_topic), "%s/req/mqtt", d.uid);
+  } else {
+    snprintf(d.req_topic, sizeof(d.req_topic), "---");
+  }
+
+  ui_mqtt_info_dialog_show(&d);
+}
+
+/**
  * @brief Set panel backlight brightness via the hardware layer (logs on failure).
  *
  * @param percent Brightness 0–100.
@@ -243,11 +270,12 @@ static void lcd_switch_screen(lcd_screen_t screen) {
   lcd_screen_t prev_screen = s_active_screen;
 
   if (screen == LCD_SCREEN_MAIN) {
-    ui_main_screen_create(s_display, NULL, lcd_eth_icon_event, lcd_wifi_icon_event);
+    ui_main_screen_create(s_display, NULL, lcd_eth_icon_event, lcd_wifi_icon_event, lcd_mqtt_icon_event);
     lcd_set_backlight(LCD_BRIGHTNESS_MAIN_PCT);
   } else {
     ui_eth_info_dialog_close_if_open();
     ui_wifi_info_dialog_close_if_open();
+    ui_mqtt_info_dialog_close_if_open();
     ui_screensaver_create(s_display);
     lcd_set_backlight(LCD_BRIGHTNESS_SAVER_PCT);
   }
@@ -642,6 +670,15 @@ bool lcd_GetWifiLinkConnected(void) {
   bool up = false;
   if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
     up = s_data.wifi.connected;
+    xSemaphoreGive(s_state_mutex);
+  }
+  return up;
+}
+
+bool lcd_GetMqttLinkConnected(void) {
+  bool up = false;
+  if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+    up = s_data.mqtt.connected;
     xSemaphoreGive(s_state_mutex);
   }
   return up;

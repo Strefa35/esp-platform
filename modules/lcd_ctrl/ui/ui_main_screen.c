@@ -326,12 +326,14 @@ static void add_relay_section(lv_obj_t* parent,
  * @param display            Active LVGL display.
  * @param on_config_pressed      Optional click handler for the settings button; NULL disables the callback.
  * @param on_eth_icon_pressed    Optional click handler for the Ethernet icon; NULL disables the callback.
- * @param on_wifi_icon_pressed  Optional click handler for the Wi-Fi icon; NULL disables the callback.
+ * @param on_wifi_icon_pressed   Optional click handler for the Wi-Fi icon; NULL disables the callback.
+ * @param on_mqtt_icon_pressed   Optional click handler for the MQTT icon; NULL disables the callback.
  */
 void ui_main_screen_create(lv_display_t* display,
                            lv_event_cb_t on_config_pressed,
                            lv_event_cb_t on_eth_icon_pressed,
-                           lv_event_cb_t on_wifi_icon_pressed) {
+                           lv_event_cb_t on_wifi_icon_pressed,
+                           lv_event_cb_t on_mqtt_icon_pressed) {
   lv_obj_t* scr = lv_display_get_screen_active(display);
   lv_obj_clean(scr);
 
@@ -395,7 +397,7 @@ void ui_main_screen_create(lv_display_t* display,
   s_icon_wifi = make_status_icon_slot(icons, MAT_ICON_WIFI, on_wifi_icon_pressed);
   set_status_icon_color(s_icon_wifi, false);
 
-  s_icon_mqtt = make_status_icon_slot(icons, MAT_ICON_CLOUD, NULL);
+  s_icon_mqtt = make_status_icon_slot(icons, MAT_ICON_CLOUD, on_mqtt_icon_pressed);
   set_status_icon_color(s_icon_mqtt, false);
 
   s_icon_bt = make_status_icon_slot(icons, MAT_ICON_BLUETOOTH, NULL);
