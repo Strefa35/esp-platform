@@ -15,12 +15,13 @@
 #include <stdio.h>
 #include <stdbool.h>
 
+/** Runtime LCD frame context: resolution, partial-render buffer size, and two DMA-capable draw buffers. */
 typedef struct {
-  int32_t h_res;
-  int32_t v_res;
-  size_t  buffer_size;
-  void*   buffer1;
-  void*   buffer2;
+  int32_t h_res;       /**< Horizontal resolution in pixels. */
+  int32_t v_res;       /**< Vertical resolution in pixels. */
+  size_t  buffer_size; /**< Bytes per LVGL partial buffer (RGB565). */
+  void*   buffer1;     /**< First partial frame buffer (DMA-capable). */
+  void*   buffer2;     /**< Second partial frame buffer (DMA-capable); may be NULL for single-buffer mode. */
 } lcd_t;
 
 

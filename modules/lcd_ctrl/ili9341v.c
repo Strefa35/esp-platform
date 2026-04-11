@@ -8,132 +8,282 @@
  * @copyright Copyright (c) 2025 4Embedded.Systems
  * 
  */
-#include <stdio.h>
+#include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 
 #include "sdkconfig.h"
 
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 
+#include "esp_lcd_ili9341.h"
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 
-#include "esp_log.h"
+#include "esp_check.h"
 #include "esp_err.h"
+#include "esp_log.h"
 
 #include "ili9341v.h"
 
-#include "esp_lcd_ili9341.h"
 
+#define LCD_HOST                   SPI2_HOST
 
-// Using SPI2 in the example
-#define LCD_HOST                  SPI2_HOST
+#define LCD_PIXEL_CLOCK_HZ         (20 * 1000 * 1000)
+#define LCD_BK_LIGHT_ON_LEVEL      1
 
-#define LCD_PIXEL_CLOCK_HZ        (20 * 1000 * 1000)
-#define LCD_BK_LIGHT_ON_LEVEL     1
-#define LCD_BK_LIGHT_OFF_LEVEL    !EXAMPLE_LCD_BK_LIGHT_ON_LEVEL
+#define LCD_PIN_NUM_SCLK           14
+#define LCD_PIN_NUM_MOSI           2
+#define LCD_PIN_NUM_MISO           -1
+#define LCD_PIN_NUM_LCD_DC         15
+#define LCD_PIN_NUM_LCD_RST        -1
+#define LCD_PIN_NUM_LCD_CS         17
+#define LCD_PIN_NUM_BK_LIGHT       4
 
-#define LCD_PIN_NUM_SCLK          14
-#define LCD_PIN_NUM_MOSI          2
-#define LCD_PIN_NUM_MISO          -1
-#define LCD_PIN_NUM_LCD_DC        15
-#define LCD_PIN_NUM_LCD_RST       -1
-#define LCD_PIN_NUM_LCD_CS        17
-#define LCD_PIN_NUM_BK_LIGHT      4
+#define LCD_H_RES                  320
+#define LCD_V_RES                  240
 
-// The pixel number in horizontal and vertical
-#define LCD_H_RES                 240
-#define LCD_V_RES                 320
-
-// Bit number used to represent command and parameter
-#define LCD_CMD_BITS              8
-#define LCD_PARAM_BITS            8
+#define LCD_CMD_BITS               8
+#define LCD_PARAM_BITS             8
 
 
 static const char* TAG = "ESP::LCD::ILI9341V";
 
-static esp_err_t lcd_SetupDisplayHw(lcd_t* lcd_ptr) {
-  esp_err_t result = ESP_OK;
+static esp_lcd_panel_io_handle_t s_io_handle = NULL;
+static esp_lcd_panel_handle_t s_panel_handle = NULL;
+static bool s_spi_inited = false;
+static bool s_backlight_inited = false;
+static lcd_flush_done_cb_t s_flush_done_cb = NULL;
+static void* s_flush_done_ctx = NULL;
 
+/**
+ * @brief Apply backlight on/off from a 0–100% value (binary: 0 = off, else on).
+ *
+ * Backlight is driven as a plain GPIO. LEDC PWM was avoided because on ESP32
+ * `ledc_update_duty` can spin in `ledc_ll_set_duty_start` while `duty_start` never
+ * clears, which runs inside a critical section and triggers Interrupt WDT.
+ *
+ * @param percent 0 turns backlight off; any value 1–100 turns it on.
+ */
+static void lcd_BacklightApplyPercent(uint8_t percent) {
+  bool on = percent > 0U;
+  int level = on ? LCD_BK_LIGHT_ON_LEVEL : (LCD_BK_LIGHT_ON_LEVEL ? 0 : 1);
+  gpio_set_level(LCD_PIN_NUM_BK_LIGHT, level);
+}
+
+/**
+ * @brief Drive the panel backlight GPIO.
+ *
+ * @param percent Brightness 0–100 (GPIO mode: only off vs full on).
+ * @return ESP_OK on success, ESP_ERR_INVALID_STATE if backlight was not initialized.
+ */
+esp_err_t lcd_SetBacklightPercent(uint8_t percent) {
+  if (!s_backlight_inited) {
+    return ESP_ERR_INVALID_STATE;
+  }
+  if (percent > 100U) {
+    percent = 100U;
+  }
+  lcd_BacklightApplyPercent(percent);
+  return ESP_OK;
+}
+
+
+/**
+ * @brief Handles panel I/O transfer-done event.
+ *
+ * @param panel_io Panel I/O handle (unused).
+ * @param edata Event payload (unused).
+ * @param user_ctx User context (unused).
+ * @return true If higher priority task should be woken.
+ * @return false Otherwise.
+ */
+static bool lcd_OnColorTransDone(esp_lcd_panel_io_handle_t panel_io,
+                                 esp_lcd_panel_io_event_data_t* edata,
+                                 void* user_ctx) {
+  (void) panel_io;
+  (void) edata;
+  (void) user_ctx;
+
+  if (s_flush_done_cb != NULL) {
+    s_flush_done_cb(s_flush_done_ctx);
+  }
+  return false;
+}
+
+/**
+ * @brief Configures SPI bus, LCD panel and DMA frame buffers.
+ *
+ * @param lcd_ptr LCD context structure to initialize.
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
+static esp_err_t lcd_SetupDisplayHw(lcd_t* lcd_ptr) {
   ESP_LOGI(TAG, "++%s()", __func__);
 
   lcd_ptr->h_res = LCD_H_RES;
   lcd_ptr->v_res = LCD_V_RES;
 
-  ESP_LOGI(TAG, "Turn off LCD backlight");
-  gpio_config_t bk_gpio_config = {
-      .mode = GPIO_MODE_OUTPUT,
-      .pin_bit_mask = 1ULL << LCD_PIN_NUM_BK_LIGHT
+  const gpio_config_t bk_gpio = {
+    .pin_bit_mask = 1ULL << LCD_PIN_NUM_BK_LIGHT,
+    .mode = GPIO_MODE_OUTPUT,
+    .pull_up_en = GPIO_PULLUP_DISABLE,
+    .pull_down_en = GPIO_PULLDOWN_DISABLE,
+    .intr_type = GPIO_INTR_DISABLE,
   };
-  ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
+  ESP_RETURN_ON_ERROR(gpio_config(&bk_gpio), TAG, "backlight gpio_config failed");
+  s_backlight_inited = true;
+  lcd_BacklightApplyPercent(0);
 
-  ESP_LOGI(TAG, "Initialize SPI bus");
   spi_bus_config_t buscfg = {
-      .sclk_io_num = LCD_PIN_NUM_SCLK,
-      .mosi_io_num = LCD_PIN_NUM_MOSI,
-      .miso_io_num = LCD_PIN_NUM_MISO,
-      .quadwp_io_num = -1,
-      .quadhd_io_num = -1,
-      .max_transfer_sz = lcd_ptr->h_res * 80 * sizeof(uint16_t),
+    .sclk_io_num = LCD_PIN_NUM_SCLK,
+    .mosi_io_num = LCD_PIN_NUM_MOSI,
+    .miso_io_num = LCD_PIN_NUM_MISO,
+    .quadwp_io_num = -1,
+    .quadhd_io_num = -1,
+    .max_transfer_sz = lcd_ptr->h_res * 40 * sizeof(uint16_t),
   };
-  ESP_ERROR_CHECK(spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO));
+  esp_err_t result = spi_bus_initialize(LCD_HOST, &buscfg, SPI_DMA_CH_AUTO);
+  if (result == ESP_OK) {
+    s_spi_inited = true;
+  } else if (result == ESP_ERR_INVALID_STATE) {
+    result = ESP_OK;
+  }
+  ESP_RETURN_ON_ERROR(result, TAG, "spi_bus_initialize failed");
 
-  ESP_LOGI(TAG, "Install panel IO");
-  esp_lcd_panel_io_handle_t io_handle = NULL;
   esp_lcd_panel_io_spi_config_t io_config = {
-      .dc_gpio_num = LCD_PIN_NUM_LCD_DC,
-      .cs_gpio_num = LCD_PIN_NUM_LCD_CS,
-      .pclk_hz = LCD_PIXEL_CLOCK_HZ,
-      .lcd_cmd_bits = LCD_CMD_BITS,
-      .lcd_param_bits = LCD_PARAM_BITS,
-      .spi_mode = 0,
-      .trans_queue_depth = 10,
+    .dc_gpio_num = LCD_PIN_NUM_LCD_DC,
+    .cs_gpio_num = LCD_PIN_NUM_LCD_CS,
+    .pclk_hz = LCD_PIXEL_CLOCK_HZ,
+    .lcd_cmd_bits = LCD_CMD_BITS,
+    .lcd_param_bits = LCD_PARAM_BITS,
+    .spi_mode = 0,
+    .trans_queue_depth = 10,
   };
-  // Attach the LCD to the SPI bus
-  ESP_ERROR_CHECK(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_HOST, &io_config, &io_handle));
+  ESP_RETURN_ON_ERROR(
+    esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t) LCD_HOST, &io_config, &s_io_handle),
+    TAG,
+    "esp_lcd_new_panel_io_spi failed");
 
-  esp_lcd_panel_handle_t panel_handle = NULL;
+  const esp_lcd_panel_io_callbacks_t io_callbacks = {
+    .on_color_trans_done = lcd_OnColorTransDone,
+  };
+  ESP_RETURN_ON_ERROR(
+    esp_lcd_panel_io_register_event_callbacks(s_io_handle, &io_callbacks, NULL),
+    TAG,
+    "panel io callback registration failed");
+
   esp_lcd_panel_dev_config_t panel_config = {
-      .reset_gpio_num = LCD_PIN_NUM_LCD_RST,
-      .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
-      .bits_per_pixel = 16,
+    .reset_gpio_num = LCD_PIN_NUM_LCD_RST,
+    .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_BGR,
+    .bits_per_pixel = 16,
   };
 
-  ESP_LOGI(TAG, "Install ILI9341 panel driver");
-  ESP_ERROR_CHECK(esp_lcd_new_panel_ili9341(io_handle, &panel_config, &panel_handle));
+  ESP_RETURN_ON_ERROR(esp_lcd_new_panel_ili9341(s_io_handle, &panel_config, &s_panel_handle), TAG, "new panel failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(s_panel_handle), TAG, "panel reset failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_init(s_panel_handle), TAG, "panel init failed");
 
-  ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_handle));
-  ESP_ERROR_CHECK(esp_lcd_panel_init(panel_handle));
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(s_panel_handle, true), TAG, "panel swap_xy failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(s_panel_handle, false, false), TAG, "panel mirror failed");
+  ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(s_panel_handle, true), TAG, "panel on failed");
 
-  ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_handle, true, false));
+  ESP_RETURN_ON_ERROR(lcd_SetBacklightPercent(100), TAG, "backlight set failed");
 
-  // user can flush pre-defined pattern to the screen before we turn on the screen or backlight
-  ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_handle, true));
-
-  ESP_LOGI(TAG, "Turn on LCD backlight");
-  gpio_set_level(LCD_PIN_NUM_BK_LIGHT, LCD_BK_LIGHT_ON_LEVEL);
-
-  // Allocate draw 2 buffers for LVGL
-  // it's recommended to choose the size of the draw buffer(s) to be at least 1/10 screen sized
-  lcd_ptr->buffer_size = (lcd_ptr->h_res * lcd_ptr->v_res) >> 3;
-
+  /* Partial buffer: 1/20 of the frame saves ~15 KiB vs 1/10 (two DMA buffers). Helps leave heap for WiFi PHY cal. */
+  lcd_ptr->buffer_size = (size_t) ((lcd_ptr->h_res * lcd_ptr->v_res) / 20U) * sizeof(uint16_t);
   lcd_ptr->buffer1 = spi_bus_dma_memory_alloc(LCD_HOST, lcd_ptr->buffer_size, 0);
-  assert(lcd_ptr->buffer1);
   lcd_ptr->buffer2 = spi_bus_dma_memory_alloc(LCD_HOST, lcd_ptr->buffer_size, 0);
-  assert(lcd_ptr->buffer2);
+  assert(lcd_ptr->buffer1 != NULL);
+  assert(lcd_ptr->buffer2 != NULL);
+
+  ESP_LOGI(TAG, "--%s()", __func__);
+  return ESP_OK;
+}
+
+/**
+ * @brief Initializes LCD display hardware driver.
+ *
+ * @param lcd_ptr LCD context structure to initialize.
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
+esp_err_t lcd_InitDisplayHw(lcd_t* lcd_ptr) {
+  esp_log_level_set(TAG, CONFIG_LCD_ILI9341V_LOG_LEVEL);
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+  esp_err_t result = lcd_SetupDisplayHw(lcd_ptr);
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
+/**
+ * @brief Deinitializes LCD display hardware driver.
+ *
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
+esp_err_t lcd_DoneDisplayHw(void) {
+  esp_err_t result = ESP_OK;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  if (s_panel_handle != NULL) {
+    if (s_backlight_inited) {
+      lcd_SetBacklightPercent(0);
+    }
+    esp_lcd_panel_del(s_panel_handle);
+    s_panel_handle = NULL;
+  }
+
+  if (s_io_handle != NULL) {
+    esp_lcd_panel_io_del(s_io_handle);
+    s_io_handle = NULL;
+  }
+
+  s_flush_done_cb = NULL;
+  s_flush_done_ctx = NULL;
+
+  if (s_backlight_inited) {
+    lcd_BacklightApplyPercent(0);
+    gpio_reset_pin(LCD_PIN_NUM_BK_LIGHT);
+    s_backlight_inited = false;
+  }
+
+  if (s_spi_inited) {
+    result = spi_bus_free(LCD_HOST);
+    s_spi_inited = false;
+  }
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
 
-esp_err_t lcd_InitDisplayHw(lcd_t* lcd_ptr) {
-  esp_err_t result = ESP_OK;
+/**
+ * @brief Flushes a rectangular area to LCD panel.
+ *
+ * @param x1 Left coordinate.
+ * @param y1 Top coordinate.
+ * @param x2 Right coordinate.
+ * @param y2 Bottom coordinate.
+ * @param color_map Pointer to RGB565 pixel data.
+ * @return esp_err_t ESP_OK on success, error code otherwise.
+ */
+esp_err_t lcd_FlushDisplayArea(int32_t x1, int32_t y1, int32_t x2, int32_t y2, const void* color_map) {
+  if (s_panel_handle == NULL || color_map == NULL) {
+    return ESP_ERR_INVALID_STATE;
+  }
 
-  esp_log_level_set(TAG, CONFIG_LCD_ILI9341V_LOG_LEVEL);
+  return esp_lcd_panel_draw_bitmap(s_panel_handle, x1, y1, x2 + 1, y2 + 1, color_map);
+}
 
-  ESP_LOGI(TAG, "++%s()", __func__);
-  result = lcd_SetupDisplayHw(lcd_ptr);
-  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
-  return result;
+/**
+ * @brief Registers callback invoked after display flush is finished.
+ *
+ * @param cb Callback function pointer.
+ * @param ctx User context passed to callback.
+ * @return esp_err_t Always ESP_OK.
+ */
+esp_err_t lcd_SetFlushDoneCallback(lcd_flush_done_cb_t cb, void* ctx) {
+  s_flush_done_cb = cb;
+  s_flush_done_ctx = ctx;
+  return ESP_OK;
 }

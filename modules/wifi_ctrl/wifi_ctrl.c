@@ -9,6 +9,7 @@
  *
  * Scan: esp_wifi_scan_start() with block=true on a worker task, then esp_wifi_scan_get_ap_records().
  * Connect: esp_wifi_set_config(WIFI_IF_STA) + esp_wifi_connect(); credentials in MSG_TYPE_WIFI_CONNECT.
+ * STA IPv4: `IP_EVENT_STA_GOT_IP` only enqueues `MSG_TYPE_WIFI_CTRL_GOT_IP`; the worker reads netif/MAC and `MGR_Send`s.
  *
  * See ESP-IDF Programming Guide: Wi-Fi Driver > Scan, and Wi-Fi > Station General Scenario.
  */
@@ -74,6 +75,8 @@ static uint16_t         s_ap_count = 0;
 static bool             s_wifi_started = false;
 /** @} */
 
+static esp_err_t wifictrl_Enqueue(const msg_t *msg);
+
 /**
  * @brief Ensure TCP/IP stack and default event loop exist (idempotent).
  *
@@ -115,37 +118,88 @@ static esp_err_t wifictrl_SendWifiEvent(data_wifi_event_e id)
 /**
  * @brief Default event loop callback for IPv4 address on the STA interface.
  *
- * Forwards `IP_EVENT_STA_GOT_IP` to the manager as `MSG_TYPE_WIFI_IP`.
+ * Keeps `sys_evt` shallow: only enqueues `MSG_TYPE_WIFI_CTRL_GOT_IP` for the worker task, which reads netif + MAC
+ * and sends `MSG_TYPE_WIFI_IP` / `MSG_TYPE_WIFI_MAC` via `MGR_Send`.
  *
  * @param arg        Unused.
  * @param event_base Expected `IP_EVENT`.
  * @param event_id   Only `IP_EVENT_STA_GOT_IP` is handled.
- * @param event_data Pointer to `ip_event_got_ip_t`.
+ * @param event_data Unused (IP is read on the worker with `esp_netif_get_ip_info`).
  */
 static void wifictrl_OnIpEvent(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
+  (void)arg;
+  (void)event_base;
+  (void)event_data;
+
   if (event_id != IP_EVENT_STA_GOT_IP) {
     return;
   }
-  ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-  const esp_netif_ip_info_t *ip_info = &event->ip_info;
+
+  msg_t msg = {
+    .type = MSG_TYPE_WIFI_CTRL_GOT_IP,
+    .from = REG_WIFI_CTRL,
+    .to = REG_WIFI_CTRL,
+  };
+
+  esp_err_t err = wifictrl_Enqueue(&msg);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "enqueue GOT_IP failed: %s", esp_err_to_name(err));
+  }
+}
+
+/**
+ * @brief Read STA IPv4 from `s_sta_netif` and publish to the manager and LCD.
+ *
+ * Intended to run on the Wi-Fi worker task (larger stack than `sys_evt`).
+ *
+ * @return ESP_OK if IP was read and forwarded (MAC send failure is logged only); errors from `esp_netif_get_ip_info`.
+ */
+static esp_err_t wifictrl_PublishStaIpAndMac(void)
+{
+  if (s_sta_netif == NULL) {
+    return ESP_ERR_INVALID_STATE;
+  }
+
+  esp_netif_ip_info_t ip_info;
+  esp_err_t err = esp_netif_get_ip_info(s_sta_netif, &ip_info);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "esp_netif_get_ip_info: %s", esp_err_to_name(err));
+    return err;
+  }
+
   msg_t msg = {
     .type = MSG_TYPE_WIFI_IP,
     .from = REG_WIFI_CTRL,
-    .to = REG_MGR_CTRL,
+    .to = REG_MGR_CTRL | REG_LCD_CTRL,
   };
+  msg.payload.wifi.u.ip_info.ip   = ip_info.ip.addr;
+  msg.payload.wifi.u.ip_info.mask = ip_info.netmask.addr;
+  msg.payload.wifi.u.ip_info.gw   = ip_info.gw.addr;
 
   ESP_LOGI(TAG, "WiFi got IP: " IPSTR " mask " IPSTR " gw " IPSTR,
-           IP2STR(&ip_info->ip), IP2STR(&ip_info->netmask), IP2STR(&ip_info->gw));
+           IP2STR(&ip_info.ip), IP2STR(&ip_info.netmask), IP2STR(&ip_info.gw));
 
-  msg.payload.wifi.u.ip_info.ip   = ip_info->ip.addr;
-  msg.payload.wifi.u.ip_info.mask = ip_info->netmask.addr;
-  msg.payload.wifi.u.ip_info.gw   = ip_info->gw.addr;
-
-  esp_err_t err = MGR_Send(&msg);
+  err = MGR_Send(&msg);
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "MGR_Send(WIFI_IP) failed: %s", esp_err_to_name(err));
   }
+
+  uint8_t sta_mac[6];
+  if (esp_wifi_get_mac(WIFI_IF_STA, sta_mac) == ESP_OK) {
+    msg_t mac_msg = {
+      .type = MSG_TYPE_WIFI_MAC,
+      .from = REG_WIFI_CTRL,
+      .to = REG_LCD_CTRL,
+    };
+    memcpy(mac_msg.payload.wifi.u.mac, sta_mac, sizeof(sta_mac));
+    err = MGR_Send(&mac_msg);
+    if (err != ESP_OK) {
+      ESP_LOGE(TAG, "MGR_Send(WIFI_MAC) failed: %s", esp_err_to_name(err));
+    }
+  }
+
+  return ESP_OK;
 }
 
 /**
@@ -304,7 +358,7 @@ static esp_err_t wifictrl_DoConnect(const data_wifi_connect_t *c)
 /**
  * @brief Dispatch one message from the worker queue.
  *
- * @param msg Incoming command; handles `MSG_TYPE_DONE`, `MSG_TYPE_WIFI_SCAN_REQ`,
+ * @param msg Incoming command; handles `MSG_TYPE_DONE`, `MSG_TYPE_WIFI_CTRL_GOT_IP`, `MSG_TYPE_WIFI_SCAN_REQ`,
  *            `MSG_TYPE_WIFI_CONNECT`, `MSG_TYPE_WIFI_DISCONNECT`.
  *
  * @return `ESP_TASK_DONE` to stop the worker loop; ESP_OK or an `esp_err_t` for other paths.
@@ -316,6 +370,10 @@ static esp_err_t wifictrl_ParseMsg(const msg_t *msg)
   switch (msg->type) {
     case MSG_TYPE_DONE: {
       result = ESP_TASK_DONE;
+      break;
+    }
+    case MSG_TYPE_WIFI_CTRL_GOT_IP: {
+      result = wifictrl_PublishStaIpAndMac();
       break;
     }
     case MSG_TYPE_WIFI_SCAN_REQ: {
@@ -582,7 +640,7 @@ esp_err_t WifiCtrl_Run(void)
  * @brief Enqueue Wi-Fi commands for the worker task.
  *
  * Accepts `MSG_TYPE_WIFI_SCAN_REQ`, `MSG_TYPE_WIFI_CONNECT`, and `MSG_TYPE_WIFI_DISCONNECT`;
- * other types are ignored (returns ESP_OK).
+ * other types are ignored (returns ESP_OK). `MSG_TYPE_WIFI_CTRL_GOT_IP` is for internal use only.
  *
  * @param msg Message to queue-copy; must not be NULL.
  *

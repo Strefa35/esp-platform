@@ -38,10 +38,12 @@ typedef enum {
   /* WiFi module */
   MSG_TYPE_WIFI_EVENT,
   MSG_TYPE_WIFI_IP,
+  MSG_TYPE_WIFI_MAC,
   MSG_TYPE_WIFI_SCAN_REQ,
   MSG_TYPE_WIFI_SCAN_RESULT,
   MSG_TYPE_WIFI_CONNECT,
   MSG_TYPE_WIFI_DISCONNECT,
+  MSG_TYPE_WIFI_CTRL_GOT_IP, /* wifi_ctrl worker queue only: defer STA IP/MAC publish from IP_EVENT */
 
   /* MQTT module */
   MSG_TYPE_MQTT_START,
@@ -209,6 +211,7 @@ typedef struct {
   union {
     data_wifi_event_e   event_id;
     data_ip_info_t      ip_info;
+    data_eth_mac_t      mac;
     data_wifi_scan_t    scan;
     data_wifi_connect_t connect;
   } u;
