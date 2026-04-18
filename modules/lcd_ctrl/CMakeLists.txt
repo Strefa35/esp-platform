@@ -14,6 +14,7 @@ set(SOURCE_LIST
   ui/ui_eth_info_dialog.c
   ui/ui_wifi_info_dialog.c
   ui/ui_mqtt_info_dialog.c
+  ui/ui_theme_dialog.c
   ui/ui_screensaver.c
 )
 
@@ -39,6 +40,7 @@ set(REQUIRE_LIST
 #### PRIV_REQUIRE_LIST
 #####################################
 set(PRIV_REQUIRE_LIST 
+  json
 )
 
 #####################################

@@ -175,6 +175,60 @@ static esp_err_t relayctrl_ParseSetRelays(const cJSON* relays) {
   return result;
 }
 
+static esp_err_t relayctrl_NotifyLcd(void) {
+  msg_t msg = {
+    .type = MSG_TYPE_MQTT_DATA,
+    .from = REG_RELAY_CTRL,
+    .to = REG_LCD_CTRL,
+  };
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s()", __func__);
+
+  cJSON* response = cJSON_CreateObject();
+  if (response != NULL) {
+    int ret = -1;
+
+    cJSON_AddStringToObject(response, "operation", "event");
+
+    cJSON* relays = cJSON_AddArrayToObject(response, "relays");
+    if (relays != NULL) {
+      for (int idx = 0; idx < RELAY_LIST_CNT; ++idx) {
+        uint32_t level = 0;
+
+        result = relayctrl_GetRelayState(idx, &level);
+        if (result != ESP_OK) {
+          break;
+        }
+
+        cJSON* relay = cJSON_CreateObject();
+        cJSON_AddNumberToObject(relay, "number", idx);
+        cJSON_AddStringToObject(relay, "state", level == 0 ? "off" : "on");
+        cJSON_AddItemToArray(relays, relay);
+      }
+    }
+
+    if (result == ESP_OK) {
+      ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0);
+      if (ret == 1) {
+        snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/res/relay", esp_uid);
+        result = MGR_Send(&msg);
+        if (result != ESP_OK) {
+          ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
+        }
+      } else {
+        ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
+        result = ESP_FAIL;
+      }
+    }
+
+    cJSON_Delete(response);
+  }
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
+
 /**
  * @brief Prepare response from relay
  * 
@@ -249,6 +303,14 @@ static esp_err_t relayctrl_PrepareResponse(const bool is_event) {
     }
     cJSON_Delete(response);
   }
+
+  {
+    esp_err_t lcd_result = relayctrl_NotifyLcd();
+    if ((result == ESP_OK) && (lcd_result != ESP_OK)) {
+      result = lcd_result;
+    }
+  }
+
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;
 }
@@ -482,6 +544,11 @@ static esp_err_t relayctrl_Run(void) {
   esp_err_t result = ESP_OK;
 
   ESP_LOGI(TAG, "++%s()", __func__);
+
+  result = relayctrl_NotifyLcd();
+  if (result != ESP_OK) {
+    ESP_LOGW(TAG, "[%s] relayctrl_NotifyLcd() failed: %d", __func__, result);
+  }
 
   ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
   return result;

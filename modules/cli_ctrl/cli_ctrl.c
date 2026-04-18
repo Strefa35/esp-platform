@@ -27,6 +27,9 @@
 #if CONFIG_WIFI_CTRL_ENABLE
 #include "cli_wifi.h"
 #endif
+#if CONFIG_CLI_CTRL_ENABLE && CONFIG_LCD_CTRL_ENABLE
+#include "cli_lcd.h"
+#endif
 
 #define CLI_TASK_NAME           "cli-task"
 #define CLI_TASK_STACK_SIZE     4096
@@ -320,6 +323,9 @@ static esp_err_t clictrl_Run(void)
 
 #if CONFIG_WIFI_CTRL_ENABLE
   CliWifi_RegisterConsoleCmd();
+#endif
+#if CONFIG_CLI_CTRL_ENABLE && CONFIG_LCD_CTRL_ENABLE
+  CliLcd_RegisterConsoleCmd();
 #endif
 
   err = esp_console_start_repl(s_repl);

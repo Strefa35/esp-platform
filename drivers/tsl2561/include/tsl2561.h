@@ -20,8 +20,8 @@
 
 
 typedef enum {
-  GAIN_1X   = 0x00,
-  GAIN_10X  = 0x10
+  GAIN_1X  = 0x00,
+  GAIN_16X = 0x10 /**< High gain; matches TSL2561 timing bit (16×, not 10×). */
 } tsl2561_gain_e;
 
 typedef enum {

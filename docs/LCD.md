@@ -20,27 +20,97 @@ Recent runtime changes worth knowing:
 
 ### Main screen (`ui_main_screen`)
 
-Current implementation includes:
+![ui_main_screen layout (320×240)](diagrams/ui_main_screen_layout.svg)
 
-- Top status bar with connectivity icons on the left: Ethernet, Wi-Fi, MQTT, Bluetooth
-- Ethernet and Wi-Fi icons are placed in **button-like touch slots** with centered Material icons
-- Settings button on the right side of the status bar
-- Large digital clock and date in the left area
-- Ambient light section (`Ambient (lx)`) with:
-  - sun icon
-  - current lux value text
-  - threshold text
-  - horizontal gradient track with value and threshold markers
+Fixed heights: `STATUS_BAR_H = 40`, `BOTTOM_BAR_H = 48`, `body_bar` = 152 px (flex grows to fill the remainder). `CLOCK_AREA_H = 56`.
 
-Touch UX notes:
+#### Function hierarchy
 
-- Ethernet / Wi-Fi status actions are triggered on **`LV_EVENT_PRESSED`** instead of waiting for a full click/release cycle
-- `LV_OBJ_FLAG_PRESS_LOCK` is used for pressable status icons to better tolerate resistive-touch jitter during release
-- MQTT and Bluetooth icons currently remain status-only (non-clickable)
+`ui_main_screen_create()` delegates to three static functions; `create_body_bar()` further delegates:
 
-Important implementation note:
+```
+ui_main_screen_create(display, on_ui_event)
+├── create_top_bar(scr, on_ui_event)       — status bar strip (h = STATUS_BAR_H)
+├── create_body_bar(scr, on_ui_event)      — flex-row body (h = 152 px)
+│   ├── create_clock_col(body_bar)         — left 60%: digital clock + date
+│   └── create_relay_panel(body_bar, on_ui_event)  — right 40%: relay panel card
+└── create_bottom_bar(scr)                 — lux pill strip (h = BOTTOM_BAR_H)
+```
 
-- The relay card block (water heater + circulation pump controls) exists in code, but is currently compiled out with `#if 0` in `ui_main_screen_create()`.
+#### Single-callback interaction model
+
+All interactive widgets share a single `lv_event_cb_t on_ui_event` callback passed into `ui_main_screen_create()`. The source is encoded as `user_data` using the `ui_main_event_id_t` enum (see `ui_main_screen.h`):
+
+```c
+ui_main_event_id_t id = (ui_main_event_id_t)(uintptr_t)lv_event_get_user_data(e);
+```
+
+`lcd_ui_event_cb` in `lcd_helper.c` dispatches on `id` to open info dialogs or send relay commands.
+
+#### Status bar (`create_top_bar`)
+
+- Connectivity icons on the left: Ethernet (`MAT_ICON_LAN`), Wi-Fi (`MAT_ICON_WIFI`), MQTT (`MAT_ICON_CLOUD`), Bluetooth (`MAT_ICON_BLUETOOTH`)
+- All four icons use **fixed-size pressable button slots** (`make_status_icon_slot`) for reliable resistive-touch targeting
+- Ethernet, Wi-Fi, and MQTT icons are **clickable** (`LV_EVENT_PRESSED`, `LV_OBJ_FLAG_PRESS_LOCK`); each opens a matching info dialog (`ui_eth_info_dialog`, `ui_wifi_info_dialog`, `ui_mqtt_info_dialog`)
+- Bluetooth icon is status-only (non-clickable)
+- Settings (gear) button on the right → opens the **theme selector dialog** (`ui_theme_dialog`)
+
+#### Body area (`create_body_bar`)
+
+Left column (`create_clock_col`): digital clock `HH:MM.SS` (Montserrat 38 / fallback) + date label below.
+
+Right column (`create_relay_panel`): rounded panel card with two relay sections (water heater, circulation pump) built by `add_relay_section()`. Each section has a title row, a “−” pill button, a center state pill, and a “+” pill button. Pill buttons use the shared `on_ui_event` callback with `UI_MAIN_EVENT_HEATER_OFF / _ON / PUMP_OFF / _ON` as user_data.
+
+> **Note:** `create_relay_panel` is currently commented out in `create_body_bar` — the relay panel is not rendered. Re-enable when relay UX is finalized.
+
+#### Ambient lux pill (`create_bottom_bar`)
+
+`s_lux_track` is a plain `lv_obj` (not `lv_bar`) with a horizontal gradient background:
+
+- **Gradient**: `COLOR_LUX_GRAD_L (#0A1628)` deep night blue → `COLOR_LUX_GRAD_R (#FFA726)` warm sunlight amber
+- **Unlit zone**: `s_lux_gray_cover` — a floating `lv_obj` child covering from the current-lux marker to the right edge (`COLOR_LUX_UNLIT #121C28`). Updated in `layout_lux_markers()`.
+- **Threshold marker**: `s_lux_thr_line` — red floating vertical line (`COLOR_LUX_THR_LINE #E53935`)
+- **Value marker**: `s_lux_val_line` — white floating vertical line; marks the boundary between lit and unlit zones
+- **Overlay** (`s_lux_overlay`): transparent flex row — `MAT_ICON_MOON` (left, dark/night side) | value + threshold labels (center, `flex_grow=1`) | `MAT_ICON_WB_SUNNY` (right, bright/day side)
+- `clip_corner=true` on `s_lux_track` clips the gray cover's right corner to the pill radius automatically
+
+`layout_lux_markers()` positions all three floating children (`s_lux_gray_cover`, `s_lux_thr_line`, `s_lux_val_line`) and resizes `s_lux_overlay` on every lux update.
+
+#### Material Icons font
+
+Font file: `fonts/lv_font_material_icons_22.c` (size 22 px, bpp 4).  
+Regenerate with `fonts/gen_material_icons_font.sh` (requires Docker + `lv_font_conv`).
+
+Current glyph set (11 glyphs):
+
+| Define | Codepoint | Icon name |
+|---|---|---|
+| `MAT_ICON_LAN` | U+EB2F | lan |
+| `MAT_ICON_WIFI` | U+E63E | wifi |
+| `MAT_ICON_CLOUD` | U+E2BD | cloud |
+| `MAT_ICON_BLUETOOTH` | U+E1A7 | bluetooth |
+| `MAT_ICON_SETTINGS` | U+E8B8 | settings |
+| `MAT_ICON_WB_SUNNY` | U+E430 | wb_sunny |
+| `MAT_ICON_MOON` | U+F036 | mode_night |
+| `MAT_ICON_WAVES` | U+E176 | waves |
+| `MAT_ICON_SYNC` | U+E627 | sync |
+| `MAT_ICON_PLAY` | U+E037 | play_arrow |
+| `MAT_ICON_PAUSE` | U+E034 | pause |
+
+#### Theme system
+
+Background gradient is driven by `ui_theme_id_t` (defined in `ui_main_screen.h`). The active theme is stored as a session-only static; it survives screen switches but not reboots.
+
+| ID | Name | Top color | Bottom color |
+|---|---|---|---|
+| `UI_THEME_DEEP_OCEAN` | Deep Ocean | `#1E4060` | `#0A1520` |
+| `UI_THEME_NORDIC_HOME` | Nordic Home | `#1C3048` | `#0A111A` |
+| `UI_THEME_WARM_SLATE` | Warm Slate | `#282038` | `#100C1E` |
+| `UI_THEME_SUNRISE` | Sunrise | `#1E3828` | `#0A1510` |
+
+API: `ui_main_screen_set_theme()`, `ui_main_screen_get_theme()`, `ui_main_screen_theme_info()`.
+
+The **theme selector dialog** (`ui_theme_dialog.c`) opens from the settings button. Each row shows a gradient swatch, theme name, and a checkmark on the active theme. Selecting a row applies the gradient immediately. Closes on the “Close” button or when switching to the screensaver.
 
 ### Screensaver (`ui_screensaver`)
 
@@ -52,10 +122,11 @@ Implemented and active:
 - Weather panel with icon, temperature, summary, and location
 - Automatic return to the screensaver after idle timeout is **disabled** in code (`LCD_SCREENSAVER_IDLE_ENABLE` in `lcd_helper.c`); only the initial “wake from saver” path is active unless you re-enable it.
 
-### Configuration screen
+### Configuration / settings
 
 - Mockup exists (`docs/todo/lcd_mockup_config.png`)
-- Dedicated UI screen implementation is not present yet
+- `cfg_btn` (gear icon in the status bar) is wired and opens the **theme selector dialog** (`ui_theme_dialog`)
+- A full multi-page configuration screen is not yet implemented
 
 ## Mockups (320x240)
 

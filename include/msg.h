@@ -254,6 +254,14 @@ typedef struct {
 } payload_error_t;
 
 /**
+ * @brief LCD merge payload for `MSG_TYPE_LCD_DATA` (same `mask` / `d_uint32[]` layout as `lcd_update_t` in `lcd_helper.h`).
+ */
+typedef struct {
+  uint32_t mask;
+  uint32_t d_uint32[8];
+} payload_lcd_t;
+
+/**
  * @brief Message structure
  * 
  */
@@ -269,6 +277,7 @@ typedef struct {
     payload_gpio_t    gpio;
     payload_power_t   power;
     payload_mqtt_t    mqtt;
+    payload_lcd_t     lcd;
     payload_error_t   error;
   } payload;
 } msg_t;

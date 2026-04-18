@@ -14,7 +14,7 @@ docker run --rm \
   node:20-bookworm-slim \
   bash -lc 'npm i -g lv_font_conv >/dev/null && lv_font_conv \
     --font /work/MaterialIcons-Regular.ttf \
-    -r 0xeb2f,0xe63e,0xe2bd,0xe8b8,0xe430,0xe176,0xe627,0xe037,0xe034,0xe1a7 \
+    -r 0xeb2f,0xe63e,0xe2bd,0xe8b8,0xe430,0xf036,0xe176,0xe627,0xe037,0xe034,0xe1a7 \
     --size 22 --bpp 4 --format lvgl --no-compress \
     -o /work/lv_font_material_icons_22.c --lv-include lvgl.h'
 echo "Wrote $OUT_C (re-apply top-of-file license comment if you use this script)."

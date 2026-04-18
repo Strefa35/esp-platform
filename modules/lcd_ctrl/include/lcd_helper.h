@@ -39,6 +39,8 @@
 
 #define LCD_MASK_AMBIENT_LUX        (1 << 20)   // lcd_update_t.u.d_uint32[0]
 #define LCD_MASK_AMBIENT_THRESHOLD  (1 << 21)   // lcd_update_t.u.d_uint32[1]
+#define LCD_MASK_RELAY_HEATER       (1 << 22)   // lcd_update_t.u.d_bool[0]
+#define LCD_MASK_RELAY_PUMP         (1 << 23)   // lcd_update_t.u.d_bool[1]
 
 
 /* Payload for lcd_UpdateData(): OR together `LCD_MASK_*` bits. */
@@ -50,6 +52,7 @@
 /* - **Wi-Fi IPv4** (bits 12–14): `LCD_MASK_WIFI_IP` / `WIFI_NETMASK` / `WIFI_GW` → `u.d_uint32[0]` / `[1]` / `[2]`. */
 /* - **Wi-Fi MAC** (bit 15): `LCD_MASK_WIFI_MAC` → `u.d_uint8[0..5]`. */
 /* - **Ambient** (bits 20–21): `LCD_MASK_AMBIENT_LUX` → `u.d_uint32[0]`; `LCD_MASK_AMBIENT_THRESHOLD` → `u.d_uint32[1]`. */
+/* - **Relays** (bits 22–23): `LCD_MASK_RELAY_HEATER` → `u.d_bool[0]`; `LCD_MASK_RELAY_PUMP` → `u.d_bool[1]` when both are updated together. */
 typedef struct {
   union {
     bool      d_bool[32];

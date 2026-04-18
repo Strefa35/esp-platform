@@ -649,8 +649,11 @@ static esp_err_t tsl2561_calculateLux(const tsl2561_t handle) {
   ESP_LOGI(TAG, "++%s(handle: %p)", __func__, handle);
 
   if (handle->broadband == 0) {
-    ESP_LOGE(TAG, "[%s] Invalid Part Number Identification: 0x%02X ", __func__, handle->partno);
-    return ESP_FAIL;
+    handle->lux = 0;
+    handle->ratio = 0;
+    ESP_LOGD(TAG, "[%s] CH0 is zero, lux set to 0", __func__);
+    ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+    return ESP_OK;
   }
   ESP_LOGD(TAG, "--> RATIO: %f [ch0: %d, ch1: %d]", handle->ratio, handle->broadband, handle->infrared);
 
@@ -675,9 +678,9 @@ static esp_err_t tsl2561_calculateLux(const tsl2561_t handle) {
     chScale = chScale << 4; // scale 1X to 16X
   }
 
-  // scale the channel values
-  channel0 = (handle->broadband * chScale) >> CH_SCALE;
-  channel1 = (handle->infrared * chScale) >> CH_SCALE;  
+  // scale the channel values (64-bit product: max raw * chScale can exceed uint32_t)
+  channel0 = (uint32_t)(((uint64_t)handle->broadband * (uint64_t)chScale) >> CH_SCALE);
+  channel1 = (uint32_t)(((uint64_t)handle->infrared * (uint64_t)chScale) >> CH_SCALE);
 
   // find the ratio of the channel values (Channel1/Channel0)
   // protect against divide by zero

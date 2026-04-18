@@ -27,6 +27,8 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 
+#include "mgr_ctrl.h"
+
 #include "ili9341v.h"
 #include "lcd_defs.h"
 #include "lcd_helper.h"
@@ -37,6 +39,7 @@
 #include "ui_eth_info_dialog.h"
 #include "ui_wifi_info_dialog.h"
 #include "ui_mqtt_info_dialog.h"
+#include "ui_theme_dialog.h"
 #include "ui_main_screen.h"
 #include "ui_screensaver.h"
 
@@ -86,6 +89,11 @@ typedef struct {
 } lcd_ambient_data_t;
 
 typedef struct {
+  bool      heater_on;
+  bool      pump_on;
+} lcd_relay_data_t;
+
+typedef struct {
   uint32_t update; /* Last lcd_UpdateData() mask argument */
   uint32_t mask;   /* Accumulated mask (fields ever updated) */
 
@@ -99,6 +107,7 @@ typedef struct {
   lcd_bt_data_t   bt;
 
   lcd_ambient_data_t ambient;
+  lcd_relay_data_t   relays;
 
 } lcd_data_t;
 
@@ -167,6 +176,11 @@ static lcd_data_t s_data = {
   .ambient = {
     .lux = 0,
     .threshold = 0,
+  },
+
+  .relays = {
+    .heater_on = false,
+    .pump_on = false,
   },
 };
 
@@ -245,6 +259,52 @@ static void lcd_mqtt_icon_event(lv_event_t* e) {
   ui_mqtt_info_dialog_show(&d);
 }
 
+static void lcd_send_relay_set(uint8_t relay_number, bool on) {
+  msg_t msg = {
+    .type = MSG_TYPE_MQTT_DATA,
+    .from = REG_LCD_CTRL,
+    .to = REG_RELAY_CTRL,
+  };
+
+  int ret = snprintf(msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE,
+                     "{\"operation\":\"set\",\"relays\":[{\"number\":%u,\"state\":\"%s\"}]}",
+                     (unsigned) relay_number,
+                     on ? "on" : "off");
+  if (ret <= 0 || ret >= DATA_MSG_SIZE) {
+    ESP_LOGE(TAG, "[%s] relay JSON format error for relay %u", __func__, (unsigned) relay_number);
+    return;
+  }
+
+  snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "lcd/local/relay");
+
+  esp_err_t err = MGR_Send(&msg);
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "[%s] MGR_Send(relay=%u, on=%d) failed: %d", __func__, (unsigned) relay_number, on, err);
+  }
+}
+
+/**
+ * @brief Single dispatcher for all main-screen interactive widgets.
+ *
+ * The source widget is identified via the `user_data` field set during widget creation.
+ * Use `ui_main_event_id_t` from ui_main_screen.h to read it:
+ *   `ui_main_event_id_t id = (ui_main_event_id_t)(uintptr_t)lv_event_get_user_data(e);`
+ */
+static void lcd_ui_event_cb(lv_event_t* e) {
+  ui_main_event_id_t id = (ui_main_event_id_t)(uintptr_t)lv_event_get_user_data(e);
+  switch (id) {
+    case UI_MAIN_EVENT_ETH:        lcd_eth_icon_event(e);        break;
+    case UI_MAIN_EVENT_WIFI:       lcd_wifi_icon_event(e);       break;
+    case UI_MAIN_EVENT_MQTT:       lcd_mqtt_icon_event(e);       break;
+    case UI_MAIN_EVENT_HEATER_OFF: lcd_send_relay_set(0u, false); break;
+    case UI_MAIN_EVENT_HEATER_ON:  lcd_send_relay_set(0u, true);  break;
+    case UI_MAIN_EVENT_PUMP_OFF:   lcd_send_relay_set(1u, false); break;
+    case UI_MAIN_EVENT_PUMP_ON:    lcd_send_relay_set(1u, true);  break;
+    case UI_MAIN_EVENT_CONFIG:     ui_theme_dialog_show();        break;
+    default:                                                       break;
+  }
+}
+
 /**
  * @brief Set panel backlight brightness via the hardware layer (logs on failure).
  *
@@ -270,12 +330,13 @@ static void lcd_switch_screen(lcd_screen_t screen) {
   lcd_screen_t prev_screen = s_active_screen;
 
   if (screen == LCD_SCREEN_MAIN) {
-    ui_main_screen_create(s_display, NULL, lcd_eth_icon_event, lcd_wifi_icon_event, lcd_mqtt_icon_event);
+    ui_main_screen_create(s_display, lcd_ui_event_cb);
     lcd_set_backlight(LCD_BRIGHTNESS_MAIN_PCT);
   } else {
     ui_eth_info_dialog_close_if_open();
     ui_wifi_info_dialog_close_if_open();
     ui_mqtt_info_dialog_close_if_open();
+    ui_theme_dialog_close_if_open();
     ui_screensaver_create(s_display);
     lcd_set_backlight(LCD_BRIGHTNESS_SAVER_PCT);
   }
@@ -433,15 +494,19 @@ static void lcd_ui_update_timer_cb(lv_timer_t* timer) {
   bool wifi = false;
   bool mqtt = false;
   bool bt = false;
+  bool heater = false;
+  bool pump = false;
   uint32_t lux = 0;
   uint32_t th = 500;
   if (s_state_mutex != NULL && xSemaphoreTake(s_state_mutex, pdMS_TO_TICKS(5)) == pdTRUE) {
-    eth   = s_data.eth.connected;
-    wifi  = s_data.wifi.connected;
-    mqtt  = s_data.mqtt.connected;
-    bt    = s_data.bt.connected;
-    lux   = s_data.ambient.lux;
-    th    = s_data.ambient.threshold;
+    eth    = s_data.eth.connected;
+    wifi   = s_data.wifi.connected;
+    mqtt   = s_data.mqtt.connected;
+    bt     = s_data.bt.connected;
+    heater = s_data.relays.heater_on;
+    pump   = s_data.relays.pump_on;
+    lux    = s_data.ambient.lux;
+    th     = s_data.ambient.threshold;
     xSemaphoreGive(s_state_mutex);
   }
 
@@ -452,6 +517,7 @@ static void lcd_ui_update_timer_cb(lv_timer_t* timer) {
     ui_main_screen_update_mqtt(mqtt);
     ui_main_screen_update_bluetooth(bt);
     ui_main_screen_update_ambient_lux(lux, th, 0);
+    ui_main_screen_update_relays(heater, pump);
   } else {
     ui_screensaver_update_time(time_str, date_str);
   }
@@ -648,6 +714,12 @@ void lcd_UpdateData(const uint32_t mask, const lcd_update_t* update) {
     }
     if (mask & LCD_MASK_AMBIENT_THRESHOLD) {
       s_data.ambient.threshold = update->u.d_uint32[1];
+    }
+    if (mask & LCD_MASK_RELAY_HEATER) {
+      s_data.relays.heater_on = update->u.d_bool[0];
+    }
+    if (mask & LCD_MASK_RELAY_PUMP) {
+      s_data.relays.pump_on = (mask & LCD_MASK_RELAY_HEATER) ? update->u.d_bool[1] : update->u.d_bool[0];
     }
 
     s_data.update = mask;

@@ -15,6 +15,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "cJSON.h"
+
 #include "sdkconfig.h"
 
 #include "err.h"
@@ -146,6 +148,69 @@ static void lcdctrl_ApplyMqttEvent(data_mqtt_event_e event_id) {
   ESP_LOGI(TAG, "--%s() - update: %d, connected: %d", __func__, update, connected);
 }
 
+static void lcdctrl_ApplyRelayData(const char* json_str) {
+  bool have_heater = false;
+  bool have_pump = false;
+  bool heater_on = false;
+  bool pump_on = false;
+
+  if (json_str == NULL || json_str[0] == '\0') {
+    return;
+  }
+
+  ESP_LOGI(TAG, "++%s(json_str: '%s')", __func__, json_str);
+
+  cJSON* root = cJSON_Parse(json_str);
+  if (root == NULL) {
+    ESP_LOGW(TAG, "[%s] cJSON_Parse() failed", __func__);
+    return;
+  }
+
+  const cJSON* relays = cJSON_GetObjectItem(root, "relays");
+  if (cJSON_IsArray(relays)) {
+    int relay_cnt = cJSON_GetArraySize(relays);
+    for (int idx = 0; idx < relay_cnt; ++idx) {
+      const cJSON* relay = cJSON_GetArrayItem(relays, idx);
+      const cJSON* o_number = cJSON_GetObjectItem(relay, "number");
+      const cJSON* o_state = cJSON_GetObjectItem(relay, "state");
+      if (!cJSON_IsNumber(o_number) || !cJSON_IsString(o_state)) {
+        continue;
+      }
+
+      int number = cJSON_GetNumberValue(o_number);
+      const char* state = cJSON_GetStringValue(o_state);
+      bool on = (state != NULL && strcmp(state, "on") == 0);
+
+      if (number == 0) {
+        heater_on = on;
+        have_heater = true;
+      } else if (number == 1) {
+        pump_on = on;
+        have_pump = true;
+      }
+    }
+  }
+
+  if (have_heater || have_pump) {
+    lcd_update_t u = {0};
+    uint32_t mask = 0;
+
+    if (have_heater) {
+      u.u.d_bool[0] = heater_on;
+      mask |= LCD_MASK_RELAY_HEATER;
+    }
+    if (have_pump) {
+      u.u.d_bool[(mask != 0U) ? 1 : 0] = pump_on;
+      mask |= LCD_MASK_RELAY_PUMP;
+    }
+    lcd_UpdateData(mask, &u);
+  }
+
+  cJSON_Delete(root);
+  ESP_LOGI(TAG, "--%s() - have_heater: %d, heater_on: %d, have_pump: %d, pump_on: %d",
+           __func__, have_heater, heater_on, have_pump, pump_on);
+}
+
 static QueueHandle_t      lcd_msg_queue = NULL;
 static TaskHandle_t       lcd_task_id = NULL;
 static SemaphoreHandle_t  lcd_sem_id = NULL;
@@ -227,6 +292,22 @@ static esp_err_t lcdctrl_ParseMsg(const msg_t* msg) {
 
     case MSG_TYPE_MQTT_EVENT: {
       lcdctrl_ApplyMqttEvent(msg->payload.mqtt.u.event_id);
+      break;
+    }
+
+    case MSG_TYPE_MQTT_DATA: {
+      const data_mqtt_data_t* data_ptr = &(msg->payload.mqtt.u.data);
+
+      if ((msg->from & REG_RELAY_CTRL) || (strstr(data_ptr->topic, "relay") != NULL)) {
+        lcdctrl_ApplyRelayData(data_ptr->msg);
+      }
+      break;
+    }
+
+    case MSG_TYPE_LCD_DATA: {
+      lcd_update_t u = {0};
+      memcpy(u.u.d_uint32, msg->payload.lcd.d_uint32, sizeof(u.u.d_uint32));
+      lcd_UpdateData(msg->payload.lcd.mask, &u);
       break;
     }
 

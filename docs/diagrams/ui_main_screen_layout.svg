@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 500 252" width="1000" height="504" role="img" aria-label="ui_main_screen layout 320x240">
+  <defs>
+    <style>
+      .box { fill: none; stroke: #5DA7B1; stroke-width: 1; }
+      .icons-pane { fill: #0D1520; stroke: #5DA7B1; stroke-width: 1; }
+      .cfg-btn { fill: #1E3048; stroke: #5DA7B1; stroke-width: 1; }
+      .fill-bar { fill: #0D1520; }
+      .fill-body { fill: #0A111A; }
+      /* body columns: opaque like LVGL (transparent → screen COLOR_BG) */
+      .body-col { fill: #0A111A; }
+      .panel-card { fill: #121C28; }
+      .bottom-bar { fill: #121C28; stroke: #5DA7B1; stroke-width: 1; }
+      .lux-col-pane { fill: #0D1520; stroke: #5DA7B1; stroke-width: 1; }
+      .lbl { font: 7px ui-monospace, monospace; fill: #e2e8f0; text-anchor: start; dominant-baseline: hanging; }
+      .lbl-fn { font: 6px ui-monospace, monospace; fill: #facc15; text-anchor: start; dominant-baseline: hanging; }
+      .lcd-frame { fill: none; stroke: #e53935; stroke-width: 1; }
+      .lcd-note { font: 9px ui-monospace, monospace; fill: #e53935; text-anchor: start; dominant-baseline: hanging; }
+      .lcd-callout { fill: none; stroke: #e53935; stroke-width: 1; stroke-linejoin: round; stroke-linecap: round; marker-end: url(#lcd_arrow); }
+      .area-callout { fill: none; stroke: #22c55e; stroke-width: 1; stroke-linecap: round; marker-end: url(#area_arrow); }
+      .area-lbl { fill: #22c55e; font: 8px ui-monospace, monospace; text-anchor: start; dominant-baseline: central; }
+    </style>
+    <pattern id="top_bar_hatch" width="6" height="6" patternUnits="userSpaceOnUse">
+      <path d="M0,6 L6,0" stroke="#22c55e" stroke-width="0.9" opacity="0.65"/>
+    </pattern>
+    <pattern id="bottom_bar_hatch" width="6" height="6" patternUnits="userSpaceOnUse">
+      <path d="M0,6 L6,0" stroke="#22c55e" stroke-width="0.9" opacity="0.6"/>
+    </pattern>`
+    <marker id="lcd_arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0,0 L7,3.5 L0,7 z" fill="#e53935"/>
+    </marker>
+    <marker id="area_arrow" markerWidth="5" markerHeight="5" refX="4.5" refY="2.5" orient="auto">
+      <path d="M0,0 L5,2.5 L0,5 z" fill="#22c55e"/>
+    </marker>
+    <linearGradient id="lux_track_main" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#0A1628"/>
+      <stop offset="100%" style="stop-color:#FFA726"/>
+    </linearGradient>
+    <linearGradient id="lux_bar_indic" x1="0%" y1="100%" x2="0%" y2="0%">
+      <stop offset="0%" style="stop-color:#5DA7B1"/>
+      <stop offset="100%" style="stop-color:#E8A838"/>
+    </linearGradient>
+  </defs>
+  <!--
+    LCD geometry (320×240, origin top-left, y down). Document order matches on-screen order, top → bottom.
+
+    Call hierarchy:
+      ui_main_screen_create(display, on_ui_event)
+      ├── create_top_bar(scr, on_ui_event)          y=0..40     h=STATUS_BAR_H(40)
+      ├── create_body_bar(scr, on_ui_event)          y=40..192   h=152  [240-40-BOTTOM_BAR_H(48)]
+      │   ├── create_clock_col(body_bar)             x=0..192    w=LEFT_COL_PCT(60%)=192
+      │   │     clock_area at (6,46) size 180×56 (LEFT_COL_PAD_HOR=6, CLOCK_AREA_H=56)
+      │   └── create_relay_panel(body_bar, on_ui_event)  x=192..320  w=RIGHT_COL_PCT(40%)=128
+      │         panel card at (198,46) size 116×140 (pad_left/right=6, pad_ver=6)
+      └── create_bottom_bar(scr)                    y=192..240  h=BOTTOM_BAR_H(48)
+            lux_col → s_lux_track (LUX_PILL_H=36) with moon|text|sun overlay
+
+    1) fill-body — full 320×240 background.
+
+    2) top_bar (y=0..40), left → right:
+         fill-bar, hatch, frame, icons-pane, Ethernet/Wi-Fi/MQTT/BT icon svgs,
+         cfg_btn, settings svg.
+
+    3) body_bar (y=40..192, h=152): 240 - STATUS_BAR_H(40) - BOTTOM_BAR_H(48) = 152
+         outer .box,
+         left col .body-col x=0..192 (LEFT_COL_PCT=60%) — create_clock_col():
+           clock_area .box at (6,46) size 180×56 (LEFT_COL_PAD_HOR=6, CLOCK_AREA_H=56)
+         right col .body-col x=192..320 (RIGHT_COL_PCT=40%) — create_relay_panel():
+           panel .panel-card at (198,46) size 116×140 (pad_left/right=6, pad_ver=6)
+
+    4) bottom_bar (y=192..240, h=BOTTOM_BAR_H=48):
+         flex CENTER: lux_col centered vertically; lux_track (h=LUX_PILL_H=36).
+         lux_col_pane at (6,196) size 308×40 (pad_hor=6, pad_ver=4).
+
+    5) Annotations (outside LVGL layout): lcd-callout, green zone callouts top → bottom.
+  -->
+  <rect class="fill-body" x="0" y="0" width="320" height="240"/>
+
+  <!-- top_bar (status strip, y=0..40, h=STATUS_BAR_H=40) -->
+  <rect class="fill-bar" x="0" y="0" width="320" height="40"/>
+  <rect x="0" y="0" width="320" height="40" fill="url(#top_bar_hatch)" pointer-events="none"/>
+  <rect class="box" x="0" y="0" width="320" height="40"/>
+  <rect class="icons-pane" x="5" y="4" width="310" height="32"/>
+  <text class="lbl-fn" x="7" y="5">create_top_bar()</text>
+  <svg x="17" y="9" width="22" height="22" viewBox="0 -960 960 960" aria-label="Ethernet LAN">
+    <path fill="#5DA7B1" d="M120-80v-280h120v-160h200v-80H320v-280h320v280H520v80h200v160h120v280H520v-280h120v-80H320v80h120v280H120Zm280-600h160v-120H400v120ZM200-160h160v-120H200v120Zm400 0h160v-120H600v120ZM480-680ZM360-280Zm240 0Z"/>
+  </svg>
+  <svg x="73" y="9" width="22" height="22" viewBox="0 -960 960 960" aria-label="Wi-Fi">
+    <path fill="#5DA7B1" d="M409-149q-29-29-29-71t29-71q29-29 71-29t71 29q29 29 29 71t-29 71q-29 29-71 29t-71-29ZM254-346l-84-86q59-59 138.5-93.5T480-560q92 0 171.5 35T790-430l-84 84q-44-44-102-69t-124-25q-66 0-124 25t-102 69ZM84-516 0-600q92-94 215-147t265-53q142 0 265 53t215 147l-84 84q-77-77-178.5-120.5T480-680q-116 0-217.5 43.5T84-516Z"/>
+  </svg>
+  <svg x="129" y="9" width="22" height="22" viewBox="0 -960 960 960" aria-label="MQTT cloud">
+    <path fill="#5DA7B1" d="M260-160q-91 0-155.5-63T40-377q0-78 47-139t123-78q25-92 100-149t170-57q117 0 198.5 81.5T760-520q69 8 114.5 59.5T920-340q0 75-52.5 127.5T740-160H260Zm0-80h480q42 0 71-29t29-71q0-42-29-71t-71-29h-60v-80q0-83-58.5-141.5T480-720q-83 0-141.5 58.5T280-520h-20q-58 0-99 41t-41 99q0 58 41 99t99 41Zm220-240Z"/>
+  </svg>
+  <svg x="185" y="9" width="22" height="22" viewBox="0 -960 960 960" aria-label="Bluetooth">
+    <path fill="#5DA7B1" d="M440-80v-304L256-200l-56-56 224-224-224-224 56-56 184 184v-304h40l228 228-172 172 172 172L480-80h-40Zm80-496 76-76-76-74v150Zm0 342 76-74-76-76v150Z"/>
+  </svg>
+  <rect class="cfg-btn" x="280" y="7" width="32" height="26" rx="6" ry="6"/>
+  <text class="lbl" x="282" y="8">cfg_btn</text>
+  <svg x="287" y="11" width="18" height="18" viewBox="0 -960 960 960" aria-label="Settings">
+    <path fill="#5DA7B1" d="m370-80-16-128q-13-5-24.5-12T307-235l-119 50L78-375l103-78q-1-7-1-13.5v-27q0-6.5 1-13.5L78-585l110-190 119 50q11-8 23-15t24-12l16-128h220l16 128q13 5 24.5 12t22.5 15l119-50 110 190-103 78q1 7 1 13.5v27q0 6.5-2 13.5l103 78-110 190-118-50q-11 8-23 15t-24 12L590-80H370Zm70-80h79l14-106q31-8 57.5-23.5T639-327l99 41 39-68-86-65q5-14 7-29.5t2-31.5q0-16-2-31.5t-7-29.5l86-65-39-68-99 42q-22-23-48.5-38.5T533-694l-13-106h-79l-14 106q-31 8-57.5 23.5T321-633l-99-41-39 68 86 64q-5 15-7 30t-2 32q0 16 2 31t7 30l-86 65 39 68 99-42q22 23 48.5 38.5T427-266l13 106Zm42-180q58 0 99-41t41-99q0-58-41-99t-99-41q-59 0-99.5 41T342-480q0 58 40.5 99t99.5 41Zm-2-140Z"/>
+  </svg>
+
+  <!-- body_bar (y=40..192): 240 - STATUS_BAR_H(40) - BOTTOM_BAR_H(48) = 152 -->
+  <rect class="box" x="0" y="40" width="320" height="152"/>
+
+  <!-- left column: x=0..192, w=LEFT_COL_PCT(60%)=192 — create_clock_col() -->
+  <rect class="box body-col" x="0" y="40" width="192" height="152"/>
+  <text class="lbl-fn" x="2" y="42">create_clock_col()</text>
+  <!-- clock_area: x=6, y=46, w=180, h=CLOCK_AREA_H(56); LEFT_COL_PAD_HOR=6, LEFT_COL_PAD_TOP=6 -->
+  <rect class="box" x="6" y="46" width="180" height="56"/>
+  <text class="lbl" x="8" y="48">clock_area (56px)</text>
+
+  <!-- right column: x=192..320, w=RIGHT_COL_PCT(40%)=128 — create_relay_panel() -->
+  <rect class="box body-col" x="192" y="40" width="128" height="152"/>
+  <text class="lbl-fn" x="194" y="42">create_relay_panel()</text>
+  <!-- panel card: x=198, y=46, w=116, h=140; pad_left/right=6, pad_ver=6 -->
+  <rect class="box panel-card" x="198" y="46" width="116" height="140"/>
+  <text class="lbl" x="200" y="48">panel (relay card)</text>
+
+  <!-- bottom_bar (y=192..240, h=BOTTOM_BAR_H=48) — create_bottom_bar() -->
+  <rect class="bottom-bar" x="0" y="192" width="320" height="48"/>
+  <rect x="0" y="192" width="320" height="48" fill="url(#bottom_bar_hatch)" pointer-events="none"/>
+  <text class="lbl-fn" x="2" y="194">create_bottom_bar()</text>
+  <!-- lux_col_pane: x=6, y=196, w=308, h=40; pad_hor=6, pad_ver=4 -->
+  <rect class="lux-col-pane" x="6" y="196" width="308" height="40"/>
+  <!-- s_lux_track centered in bottom_bar (flex CENTER); LUX_PILL_H=36, moon|text|sun overlay -->
+  <g id="s_lux_track_lv_bar" role="group" aria-label="s_lux_track; LUX_PILL_H=36; moon left, sun right, threshold=red, value=white">
+    <title>s_lux_track — lv_obj_create(lux_col). LUX_PILL_H=36 (schematic). Overlay: moon | value+threshold labels | sun. Red bar = s_lux_thr_line. White bar = s_lux_val_line.</title>
+    <rect x="10" y="204" width="300" height="28" rx="14" fill="url(#lux_track_main)" stroke="#4A6270" stroke-width="1"/>
+    <rect x="10" y="204" width="72" height="28" rx="14" fill="url(#lux_bar_indic)" opacity="0.95"/>
+    <rect x="118" y="204" width="3" height="28" fill="#E8A838"/>
+  </g>
+
+  <!-- Annotations (top → bottom on the right): title, red callout leg, then green zone markers -->
+  <!-- lcd-note and .area-lbl share x=342 so both captions start on the same vertical line -->
+  <text class="lcd-note" x="342" y="2">LCD 320×240</text>
+  <path class="lcd-callout" d="M 406 13 L 334 13 L 322 28"/>
+  <path class="area-callout" d="M 390 36 L 318 36"/>
+  <text class="area-lbl" x="342" y="29">top_bar (40px)</text>
+  <path class="area-callout" d="M 390 116 L 318 116"/>
+  <text class="area-lbl" x="342" y="116">body_bar (152px)</text>
+  <path class="area-callout" d="M 390 216 L 318 216"/>
+  <text class="area-lbl" x="342" y="216">bottom_bar (48px)</text>
+</svg>
