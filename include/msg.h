@@ -38,10 +38,12 @@ typedef enum {
   /* WiFi module */
   MSG_TYPE_WIFI_EVENT,
   MSG_TYPE_WIFI_IP,
+  MSG_TYPE_WIFI_MAC,
   MSG_TYPE_WIFI_SCAN_REQ,
   MSG_TYPE_WIFI_SCAN_RESULT,
   MSG_TYPE_WIFI_CONNECT,
   MSG_TYPE_WIFI_DISCONNECT,
+  MSG_TYPE_WIFI_CTRL_GOT_IP, /* wifi_ctrl worker queue only: defer STA IP/MAC publish from IP_EVENT */
 
   /* MQTT module */
   MSG_TYPE_MQTT_START,
@@ -209,6 +211,7 @@ typedef struct {
   union {
     data_wifi_event_e   event_id;
     data_ip_info_t      ip_info;
+    data_eth_mac_t      mac;
     data_wifi_scan_t    scan;
     data_wifi_connect_t connect;
   } u;
@@ -251,6 +254,14 @@ typedef struct {
 } payload_error_t;
 
 /**
+ * @brief LCD merge payload for `MSG_TYPE_LCD_DATA` (same `mask` / `d_uint32[]` layout as `lcd_update_t` in `lcd_helper.h`).
+ */
+typedef struct {
+  uint32_t mask;
+  uint32_t d_uint32[8];
+} payload_lcd_t;
+
+/**
  * @brief Message structure
  * 
  */
@@ -266,6 +277,7 @@ typedef struct {
     payload_gpio_t    gpio;
     payload_power_t   power;
     payload_mqtt_t    mqtt;
+    payload_lcd_t     lcd;
     payload_error_t   error;
   } payload;
 } msg_t;

@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(idf.py *)",
+      "Bash(python3 scripts/*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/check-sdkconfig.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/warn-set-target.sh"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/remind-module-registration.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+

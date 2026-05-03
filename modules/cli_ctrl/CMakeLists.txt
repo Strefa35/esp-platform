@@ -11,6 +11,10 @@ if(CONFIG_WIFI_CTRL_ENABLE)
   list(APPEND SOURCE_LIST cli_wifi.c)
 endif()
 
+if(CONFIG_LCD_CTRL_ENABLE)
+  list(APPEND SOURCE_LIST cli_lcd.c)
+endif()
+
 #####################################
 #### INCLUDE_LIST
 #####################################
@@ -19,15 +23,9 @@ set(INCLUDE_LIST
 )
 
 #####################################
-#### REQUIRE_LIST
-#####################################
-set(REQUIRE_LIST
-)
-
-#####################################
 #### PRIV_REQUIRE_LIST
 #####################################
-set(PRIV_REQUIRE_LIST 
+set(PRIV_REQUIRE_LIST
   console
 )
 
@@ -37,6 +35,5 @@ set(PRIV_REQUIRE_LIST
 idf_component_register(
   SRCS ${SOURCE_LIST}
   INCLUDE_DIRS ${INCLUDE_LIST}
-  REQUIRES ${REQUIRE_LIST}
   PRIV_REQUIRES ${PRIV_REQUIRE_LIST}
 )

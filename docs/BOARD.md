@@ -72,8 +72,9 @@ Industrial-style IoT board with **Ethernet (RMII)**, Wi‑Fi, relays, SD card, a
 
 #### Optional peripherals in this firmware
 
-- **LCD**: ILI9341V + NS2009 touch (`CONFIG_LCD_CTRL_ENABLE=y` in ESP32 debug defaults). Wiring and calibration: [LCD.md](LCD.md).
+- **LCD**: ILI9341V + NS2009 touch (`CONFIG_LCD_CTRL_ENABLE=y` in ESP32 debug defaults). Wiring, rotation, and touch notes: [LCD.md](LCD.md).
 - **Light sensor**: TSL2561 driver under `drivers/tsl2561/` (enabled in ESP32 debug defaults).
+- **CLI / UART console**: `cli_ctrl` is enabled in the current ESP32 default profile, so the serial monitor exposes an `esp>` prompt after boot for field diagnostics and manual commands.
 - Onboard **relays** and other EVB features are controlled when `relay_ctrl` and related options are enabled in Kconfig.
 
 ---
