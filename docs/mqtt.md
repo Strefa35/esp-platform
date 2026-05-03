@@ -48,7 +48,7 @@ Information about connected devices. After starting, the controller sends inform
     "uid": "ESP/12AB34",
     "mac": "12:34:56:78:90:AB",
     "ip": "10.0.0.20",
-    "list": ["eth", "mqtt"]
+    "list": ["eth", "wifi", "relay", "lcd", "sys", "sensor", "cli", "mqtt"]
   }
   ```
 
@@ -62,7 +62,7 @@ Information about connected devices. After starting, the controller sends inform
     "uid": "ESP/12AB34",
     "mac": "12:34:56:78:90:AB",
     "ip": "10.0.0.20",
-    "list": ["eth", "mqtt"]
+    "list": ["eth", "wifi", "relay", "lcd", "sys", "sensor", "cli", "mqtt"]
   }
   ```
 

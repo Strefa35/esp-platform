@@ -26,7 +26,6 @@
 #include "lcd_hw.h"
 #include "lcd_helper.h"
 
-#include "err.h"
 #include "lut.h"
 
 

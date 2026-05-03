@@ -32,8 +32,9 @@ Fixed heights: `STATUS_BAR_H = 40`, `BOTTOM_BAR_H = 48`, `body_bar` = 152 px (fl
 ui_main_screen_create(display, on_ui_event)
 ├── create_top_bar(scr, on_ui_event)       — status bar strip (h = STATUS_BAR_H)
 ├── create_body_bar(scr, on_ui_event)      — flex-row body (h = 152 px)
-│   ├── create_clock_col(body_bar)         — left 60%: digital clock + date
-│   └── create_relay_panel(body_bar, on_ui_event)  — right 40%: relay panel card
+│   ├── create_analog_clock_col(body_bar)  — left square area: analog clock + date (default)
+│   ├── create_clock_col(body_bar)         — digital clock alternative (fallback path)
+│   └── create_relay_panel(body_bar, on_ui_event)  — right 40%: relay panel card (currently disabled)
 └── create_bottom_bar(scr)                 — lux pill strip (h = BOTTOM_BAR_H)
 ```
 
@@ -57,7 +58,9 @@ ui_main_event_id_t id = (ui_main_event_id_t)(uintptr_t)lv_event_get_user_data(e)
 
 #### Body area (`create_body_bar`)
 
-Left column (`create_clock_col`): digital clock `HH:MM.SS` (Montserrat 38 / fallback) + date label below.
+Current default path (`create_analog_clock_col`): analog clock rendered in a square area (`BODY_BAR_H x BODY_BAR_H`) with date label below.
+
+Alternative path (`create_clock_col`): digital clock `HH:MM.SS` + date label below (used as fallback when analog scale support is unavailable).
 
 Right column (`create_relay_panel`): rounded panel card with two relay sections (water heater, circulation pump) built by `add_relay_section()`. Each section has a title row, a “−” pill button, a center state pill, and a “+” pill button. Pill buttons use the shared `on_ui_event` callback with `UI_MAIN_EVENT_HEATER_OFF / _ON / PUMP_OFF / _ON` as user_data.
 
@@ -175,6 +178,11 @@ LVGL integration layer:
 
 Hardware composition layer for display + touch init/deinit.
 
+Recent hardening changes:
+
+- input validation added in `lcd_InitHw` (`lcd_ptr != NULL`)
+- if `ns2009_Init` fails after display init, the display layer is rolled back (`lcd_DoneDisplayHw`) before returning the touch error
+
 ### `ili9341v.c`
 
 ILI9341 display backend:
@@ -190,6 +198,16 @@ Touch backend:
 - I2C probe and reads
 - coordinate conversion/calibration
 - pressure / valid-touch filtering with a capped effective threshold
+- probe-failure cleanup now removes added I2C device handle and deletes owned bus to avoid leaked handles
+
+### Shared LCD masks (`include/lcd_mask.h`)
+
+Ambient update mask bits are now centralized in a shared header used by both LCD and CLI layers:
+
+- `LCD_MASK_AMBIENT_LUX`
+- `LCD_MASK_AMBIENT_THRESHOLD`
+
+This removes duplicated local defines and keeps message mask semantics consistent across modules.
 
 ## Kconfig and Tuning Notes
 

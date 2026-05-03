@@ -213,6 +213,19 @@ static esp_err_t ns2009_init(void) {
   result = i2c_master_probe(ns2009_i2c_bus_handle, NS2009_SLAVE_ADDR, 100 / portTICK_PERIOD_MS);
   if (result != ESP_OK) {
     ESP_LOGE(TAG, "[%s] i2c_master_probe() failed: %d", __func__, result);
+
+    if (ns2009_i2c_dev_handle != NULL && ns2009_dev_added) {
+      i2c_master_bus_rm_device(ns2009_i2c_dev_handle);
+      ns2009_i2c_dev_handle = NULL;
+      ns2009_dev_added = false;
+    }
+
+    if (ns2009_i2c_bus_handle != NULL && ns2009_bus_owner) {
+      i2c_del_master_bus(ns2009_i2c_bus_handle);
+      ns2009_bus_owner = false;
+      ns2009_i2c_bus_handle = NULL;
+    }
+
     return result;
   }
 

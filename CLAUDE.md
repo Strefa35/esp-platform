@@ -13,6 +13,7 @@ ESP-IDF (v5.5.2) firmware for ESP32-family microcontrollers. The device controls
 . $IDF_PATH/export.sh
 
 # Set target (required once per board; clears sdkconfig)
+cp sdkconfig.defaults.esp32.debug sdkconfig.defaults
 idf.py set-target esp32        # or esp32s2, esp32s3
 
 # Interactive configuration
@@ -31,7 +32,9 @@ idf.py -p /dev/ttyACM0 flash monitor
 idf.py save-defconfig
 ```
 
-Board-specific debug defaults: `sdkconfig.defaults.esp32.debug`, `sdkconfig.defaults.esp32s2.debug`, `sdkconfig.defaults.esp32s3.debug`. Copy the appropriate file over `sdkconfig.defaults` before setting the target.
+Board-specific debug defaults: `sdkconfig.defaults.esp32.debug`, `sdkconfig.defaults.esp32s2.debug`, `sdkconfig.defaults.esp32s3.debug`. Copy the appropriate file over `sdkconfig.defaults` before `idf.py set-target`.
+
+The checked-in `sdkconfig.defaults` targets ESP32 with modules: `eth`, `wifi`, `relay`, `lcd`, `sys`, `sensor`, `cli`, `mqtt`.
 
 ## Architecture
 
@@ -41,10 +44,10 @@ Board-specific debug defaults: `sdkconfig.defaults.esp32.debug`, `sdkconfig.defa
 
 Each module exports exactly this interface (`mgr_reg_t` in `include/mgr_reg.h`):
 - `init_fn` — allocate resources, start FreeRTOS task
-- `done_fn` — tear down
+- `done_fn` — tear down (called in **reverse** registry order)
 - `run_fn` — called once by manager after all inits complete
 - `send_fn` — receive a `msg_t` from the manager
-- `get_fn` — optional bulk-read callback for producers (e.g. WiFi scan list consumed by both LCD and MQTT without those modules calling each other)
+- `get_fn` — optional bulk-read callback; consumers call `MGR_GetData(REG_*_CTRL, type, cb, ctx)` to pull snapshot data (e.g. Wi-Fi scan list) from a producer without those modules including each other
 
 **Registry ordering matters:** `eth_ctrl` must be the first entry; `mqtt_ctrl` must be the last.
 
@@ -60,21 +63,63 @@ All modules live under `modules/`. Each is an ESP-IDF component with its own `CM
 
 Each module runs its own FreeRTOS task with an internal message queue (`QueueHandle_t`). The manager routes `msg_t` messages between modules via `send_fn`. `mqtt_ctrl` is the bridge to the external MQTT broker — it receives outbound messages from other modules and forwards inbound MQTT payloads (JSON) to the appropriate module by topic.
 
+`msg_t` fields (defined in `include/msg.h`):
+- `type` — `msg_type_e` discriminant
+- `from` / `to` — bitmasks of `REG_*_CTRL` flags (defined in `include/msg.h`); the manager fans out to all matching registry entries
+- `payload` — union selected by `type`
+
+If `msg.to` includes `REG_MGR_CTRL`, the manager also runs `mgr_ParseMsg` locally before forwarding (e.g. Ethernet IP → start MQTT, MQTT connected → subscribe topics).
+
+### MQTT Topic Routing
+
+Inbound MQTT payloads of the form `{uid}/req/{module-name}` are routed by the manager to the matching module's `send_fn` by name. `mqtt_ctrl` carries `REG_INT_CTRL` in its `type` field, which marks it as internal-only and prevents external addressing.
+
+### LCD Update Path
+
+Modules outside `lcd_ctrl` push display state via two mechanisms:
+
+1. **Direct call** (within `lcd_ctrl` task context or thread-safe helper): `lcd_UpdateData(mask, &update)` defined in `modules/lcd_ctrl/include/lcd_helper.h`.
+2. **Message bus** (from any other module): send `MSG_TYPE_LCD_DATA` with a `payload_lcd_t` (`mask` + `d_uint32[8]` array). The manager forwards it to `lcd_ctrl`, which calls `lcd_UpdateData` internally.
+
+`LCD_MASK_*` bits are split across two headers:
+- `modules/lcd_ctrl/include/lcd_helper.h` — most masks (board, ETH, WiFi, MQTT, relay)
+- `include/lcd_mask.h` — shared masks used by modules outside `lcd_ctrl` (ambient lux, threshold)
+
+Only include `lcd_mask.h` from non-LCD modules; `lcd_helper.h` is `lcd_ctrl`-internal.
+
 ### Custom Drivers
 
 `drivers/tsl2561/` — TSL2561 light intensity sensor. Listed as an `EXTRA_COMPONENT_DIRS` in root `CMakeLists.txt`, alongside `modules/`.
 
 ### LCD Stack
 
-`modules/lcd_ctrl/` drives an ILI9341V display with NS2009 touch. The UI is built with LVGL (managed component `lvgl__lvgl`). Display and touch drivers are in `ili9341v.c` and `ns2009.c`; see `docs/LCD.md` for wiring and calibration details.
+`modules/lcd_ctrl/` drives an ILI9341V display (320×240) with NS2009 touch over I2C. The UI is built with LVGL 9.x (managed component `lvgl__lvgl`). **`lcd_ctrl` supports only ESP32 and ESP32-S3 targets** — a compile-time guard in `lcd_ctrl.c` enforces this.
+
+Internal layers:
+- `lcd_hw.c` — hardware composition (display + touch init/deinit)
+- `ili9341v.c` — ILI9341 SPI backend with LVGL flush callback
+- `ns2009.c` — touch backend with coordinate calibration and pressure filtering
+- `lcd_helper.c` — LVGL init, display/touch binding, software rotation in flush callback, periodic tick task, `lcd_UpdateData`
+- `lcd_ctrl.c` — module entry points and message handling
+
+Display rotation is handled in the **flush callback** (rotating pixel data with `lv_draw_sw_rotate`). Do **not** manually unrotate touch coordinates in the NS2009 read callback — LVGL handles that automatically after `lv_indev_set_display`.
+
+Material Icons font: `fonts/lv_font_material_icons_22.c`. Regenerate with `fonts/gen_material_icons_font.sh` (requires Docker + `lv_font_conv`).
+
+See `docs/LCD.md` for wiring, calibration details, and current UI structure.
 
 ### New Module Reference
 
-Use `modules/template_ctrl/` as the implementation template. The pattern: static `QueueHandle_t` + `TaskHandle_t` + `SemaphoreHandle_t`, one FreeRTOS task, JSON parsing via cJSON, and the five exported `*Ctrl_*` functions registered in `mgr_reg_list.h`.
+Use `modules/template_ctrl/` as the implementation template. The pattern: static `QueueHandle_t` + `TaskHandle_t` + `SemaphoreHandle_t`, one FreeRTOS task, JSON parsing via cJSON, and five exported `XxxCtrl_*` functions registered in `mgr_reg_list.h`.
+
+Assign the new module a unique `REG_*_CTRL` bit in `include/msg.h` and a `MSG_TYPE_*` variant if it introduces new message types.
+
+`cli_ctrl` demonstrates splitting CLI sub-commands across multiple files (`cli_lcd.c`, `cli_wifi.c`) — each file registers its own `esp_console` commands and is conditionally compiled on the combination of `CONFIG_CLI_CTRL_ENABLE && CONFIG_<OTHER>_CTRL_ENABLE`.
 
 ## Key Documentation
 
+- `docs/architecture.md` — comprehensive architecture reference with sequence and flow diagrams
 - `docs/mqtt.md` — MQTT topic structure and JSON message formats
 - `docs/build.md` — Board-specific flash/serial connection notes
-- `docs/LCD.md` — LCD wiring, touch calibration, LVGL notes
+- `docs/LCD.md` — LCD wiring, touch calibration, LVGL UI structure, and Kconfig options
 - `docs/memory.md` — Heap profiling; use `scripts/parse_mem_log.py` to analyze logs

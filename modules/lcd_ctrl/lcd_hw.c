@@ -36,13 +36,23 @@ esp_err_t lcd_InitHw(lcd_t* lcd_ptr) {
 
   ESP_LOGI(TAG, "++%s()", __func__);
 
+  ESP_RETURN_ON_FALSE(lcd_ptr != NULL, ESP_ERR_INVALID_ARG, TAG, "lcd_ptr is NULL");
+
   ESP_RETURN_ON_ERROR(lcd_InitDisplayHw(lcd_ptr), TAG, "lcd_InitDisplayHw failed");
 
   ns2009_res_t res = {
     .h = (uint32_t) lcd_ptr->h_res,
     .v = (uint32_t) lcd_ptr->v_res,
   };
-  ESP_RETURN_ON_ERROR(ns2009_Init(&res), TAG, "ns2009_Init failed");
+  esp_err_t touch_result = ns2009_Init(&res);
+  if (touch_result != ESP_OK) {
+    ESP_LOGE(TAG, "ns2009_Init failed");
+    esp_err_t rollback_result = lcd_DoneDisplayHw();
+    if (rollback_result != ESP_OK) {
+      ESP_LOGE(TAG, "lcd_DoneDisplayHw rollback failed: %d", rollback_result);
+    }
+    return touch_result;
+  }
 
   ESP_LOGI(TAG, "--%s()", __func__);
   return ESP_OK;
