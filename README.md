@@ -24,10 +24,12 @@ Currently, the following boards are supported:
   - [ESP32-S2 Mini](https://www.wemos.cc/en/latest/s2/s2_mini.html)
   - [Hardware reference](https://docs.espressif.com/projects/esp-idf/en/v5.5.1/esp32s2/hw-reference/index.html)
 
-The above boards have their configurations available in sdkconfig.defaults files:
-- sdkconfig.defaults.esp32.debug
-- sdkconfig.defaults.esp32s3.debug
-- sdkconfig.defaults.esp32s2.debug
+The above boards have their configurations available in board-specific defaults files:
+- `sdkconfig.defaults.esp32.debug`
+- `sdkconfig.defaults.esp32s3.debug`
+- `sdkconfig.defaults.esp32s2.debug`
+
+For a hardware-oriented overview of the supported boards, see [docs/BOARD.md](docs/BOARD.md). For a broader comparison of current and candidate ESP-IDF targets, see [docs/MCU.md](docs/MCU.md).
 
 ### Partition table (ESP32)
 
@@ -73,14 +75,17 @@ idf.py menuconfig
 ## Configure ESP environment
 
 ### Install ESP-IDF
-- To build repo you need to install [Espressif IoT Development Framework](https://github.com/espressif/esp-idf)
-- More information you can find here: [Installation Step by Step](hhttps://docs.espressif.com/projects/esp-idf/en/v5.4/esp32/get-started/linux-macos-setup.html#installation-step-by-step)
+- To build the repo you need to install [Espressif IoT Development Framework](https://github.com/espressif/esp-idf)
+- More information is available here: [Installation Step by Step](https://docs.espressif.com/projects/esp-idf/en/v5.4/esp32/get-started/linux-macos-setup.html#installation-step-by-step)
+- From the `esp-idf` folder, export the environment with: `. ./export.sh`
 
-- From esp-idf folder do below command: `. ./export.sh` to export 
-
-For detailed build and compilation instructions, see [docs/build.md](docs/build.md).
-
-For **runtime heap snapshot logging** (optional `mem_check` module, menuconfig, and serial log format), see [docs/memory.md](docs/memory.md). To turn a capture into Markdown tables of approximate per-module deltas, see [docs/parse_mem_log.md](docs/parse_mem_log.md).
+### Project documentation
+- [docs/build.md](docs/build.md) — build, target switch, flash, and serial notes
+- [docs/BOARD.md](docs/BOARD.md) — supported boards, defaults files, and hardware summary
+- [docs/MCU.md](docs/MCU.md) — comparison of current and candidate ESP-IDF targets
+- [docs/mqtt.md](docs/mqtt.md) — MQTT topics and JSON message format
+- [docs/memory.md](docs/memory.md) — runtime heap snapshot logging and `mem_check`
+- [docs/parse_mem_log.md](docs/parse_mem_log.md) — convert memory logs into Markdown reports
 
 ### Configuration esp-platform
 - `idf.py menuconfig`
@@ -96,18 +101,32 @@ For **runtime heap snapshot logging** (optional `mem_check` module, menuconfig, 
   - `idf.py -p /dev/ttyUSB0 flash monitor` - for USB A
   - `idf.py -p /dev/ttyACM0 flash monitor` - for USB C
 
-# ESP Repo
+# Repository overview
 
-## List of modules
-The solution consists of several modules:
-- mgr_ctrl
-- eth_ctrl
-- mqtt_ctrl
-- relay_ctrl
-- sensor_ctrl
-- sys_ctrl
+## Main components
+The platform is modular, and the enabled feature set depends on the selected target and `menuconfig` options.
 
-The main module is the management module (**mgr_ctrl**) which allows for managing modules and mediates data transmission between modules.
+| Component | Purpose |
+| --------- | ------- |
+| `mgr_ctrl` | Main lifecycle manager and message router between modules |
+| `eth_ctrl` | Ethernet connectivity |
+| `wifi_ctrl` | Wi‑Fi station scan/connect support |
+| `mqtt_ctrl` | MQTT communication and JSON exchange |
+| `cfg_ctrl` | Configuration handling |
+| `cli_ctrl` | Serial / console CLI support |
+| `gpio_ctrl` | GPIO abstraction |
+| `relay_ctrl` | Relay output control |
+| `lcd_ctrl` | LCD and touch UI support |
+| `sensor_ctrl` | Sensor integration (currently including `TSL2561`) |
+| `sys_ctrl` | System-level status and services |
+| `template_ctrl` | Example module used as a template for further expansion |
+
+Additional core helpers live in `main/` and `include/`, for example `nvs_ctrl`, `tools`, and the optional `mem_check` memory logging support.
+
+The main coordination module is **`mgr_ctrl`**, which initializes enabled controllers and mediates data transmission between them.
+
+## Drivers
+Project-specific drivers are stored under `drivers/`, currently including the `TSL2561` light sensor driver.
 
 # Communication
 
