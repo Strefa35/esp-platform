@@ -59,6 +59,16 @@
 #define LUX_SPAN_DEFAULT    4000u
 #define LUX_MARKER_W        3
 
+/** Body area height: screen (240) − STATUS_BAR_H (40) − BOTTOM_BAR_H (48) = 152 px.
+ *  Used by the analog clock to size the left column as a square matching body height. */
+#define BODY_BAR_H          152
+
+/** Analog clock face diameter (px). Sized to fill a BODY_BAR_H × BODY_BAR_H square container. */
+#define ANALOG_CLOCK_SIZE   130
+#define ANALOG_HOUR_LEN      36  /* hour hand px from center — ~55% of radius */
+#define ANALOG_MIN_LEN       52  /* minute hand px from center — ~80% of radius */
+#define ANALOG_SEC_LEN       60  /* second hand px from center — ~92% of radius */
+
 /* ------------------------------------------------------------------ */
 /*  Widget handles                                                    */
 /* ------------------------------------------------------------------ */
@@ -66,9 +76,23 @@ static lv_obj_t* s_icon_eth = NULL;
 static lv_obj_t* s_icon_wifi = NULL;
 static lv_obj_t* s_icon_mqtt = NULL;
 static lv_obj_t* s_icon_bt = NULL;
+
+/** Digital clock handles — non-NULL when create_clock_col() was called. */
 static lv_obj_t* s_lbl_hm = NULL;
 static lv_obj_t* s_lbl_sec = NULL;
 static lv_obj_t* s_label_date = NULL;
+
+/** Analog clock handles — non-NULL when create_analog_clock_col() was called. */
+static lv_obj_t* s_analog_scale     = NULL;
+static lv_obj_t* s_analog_hand_hour = NULL;
+static lv_obj_t* s_analog_hand_min  = NULL;
+static lv_obj_t* s_analog_hand_sec  = NULL;
+static lv_obj_t* s_analog_date_lbl  = NULL;
+#if LV_USE_SCALE
+/* Mutable point buffers for the needle lines (must outlive the lv_line widgets). */
+static lv_point_precise_t s_analog_min_pts[2];
+static lv_point_precise_t s_analog_sec_pts[2];
+#endif
 /** Lux pill: gradient track; gray cover hides unlit zone (right of lux marker);
  *  red thr_line = threshold; white val_line = current lux; overlay = moon/text/sun. */
 static lv_obj_t* s_lux_caption = NULL;
@@ -594,6 +618,136 @@ static void create_clock_col(lv_obj_t* parent) {
 }
 
 /**
+ * @brief Build and attach the left clock column with an analog clock face.
+ *
+ * Uses lv_scale in ROUND_INNER mode for the face, lv_line needles driven by
+ * lv_scale_set_line_needle_value(), and a date label overlaid in the lower center of the dial.
+ * Falls back to a centered digital HH:MM:SS label when LV_USE_SCALE is disabled in sdkconfig.
+ *
+ * To switch between clock styles, edit create_body_bar() and comment/uncomment one line.
+ *
+ * Writes to module-level handles: s_analog_scale, s_analog_hand_*, s_analog_date_lbl
+ * (or s_lbl_hm, s_label_date in the LV_USE_SCALE=0 fallback path).
+ *
+ * @param parent Body row container (flex row).
+ */
+static void create_analog_clock_col(lv_obj_t* parent) {
+  /* Square container: width = body_bar height, so the circular face fills the column top-to-bottom. */
+  lv_obj_t* left = lv_obj_create(parent);
+  lv_obj_remove_style_all(left);
+  lv_obj_set_size(left, BODY_BAR_H, LV_PCT(100));
+  lv_obj_set_layout(left, LV_LAYOUT_FLEX);
+  lv_obj_set_flex_flow(left, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(left, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_remove_flag(left, LV_OBJ_FLAG_SCROLLABLE);
+
+#if LV_USE_SCALE
+  /* One-time style init — static styles must outlive the widgets. */
+  static lv_style_t style_major;
+  static lv_style_t style_minor;
+  static lv_style_t style_arc;
+  static bool       styles_ready = false;
+  if (!styles_ready) {
+    lv_style_init(&style_major);
+    lv_style_set_line_color(&style_major, lv_color_hex(COLOR_ACCENT));
+    lv_style_set_length(&style_major, 8);
+    lv_style_set_line_width(&style_major, 2);
+    /* Suppress numeric labels — clean tick-only face. */
+    lv_style_set_text_opa(&style_major, LV_OPA_TRANSP);
+
+    lv_style_init(&style_minor);
+    lv_style_set_line_color(&style_minor, lv_color_hex(COLOR_ICON_DIM));
+    lv_style_set_length(&style_minor, 4);
+    lv_style_set_line_width(&style_minor, 1);
+
+    lv_style_init(&style_arc);
+    lv_style_set_arc_color(&style_arc, lv_color_hex(COLOR_ACCENT));
+    lv_style_set_arc_width(&style_arc, 2);
+
+    styles_ready = true;
+  }
+
+  /* Clock face: circular lv_scale, ROUND_INNER mode, 60-unit range = 60 minutes/seconds. */
+  s_analog_scale = lv_scale_create(left);
+  lv_obj_set_size(s_analog_scale, ANALOG_CLOCK_SIZE, ANALOG_CLOCK_SIZE);
+  lv_scale_set_mode(s_analog_scale, LV_SCALE_MODE_ROUND_INNER);
+  lv_scale_set_range(s_analog_scale, 0, 60);
+  lv_scale_set_total_tick_count(s_analog_scale, 61);
+  lv_scale_set_major_tick_every(s_analog_scale, 5);  /* 12 major ticks = hour positions */
+  lv_scale_set_angle_range(s_analog_scale, 360);
+  lv_scale_set_rotation(s_analog_scale, 270);         /* 0 units → 12 o'clock */
+  lv_scale_set_label_show(s_analog_scale, false);     /* ticks only, no numbers */
+
+  lv_obj_set_style_bg_color(s_analog_scale, lv_color_hex(COLOR_PANEL_BG), 0);
+  lv_obj_set_style_bg_opa(s_analog_scale, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(s_analog_scale, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_clip_corner(s_analog_scale, true, 0);
+  lv_obj_add_style(s_analog_scale, &style_arc,   LV_PART_MAIN);
+  lv_obj_add_style(s_analog_scale, &style_major, LV_PART_INDICATOR);
+  lv_obj_add_style(s_analog_scale, &style_minor, LV_PART_ITEMS);
+
+  /* Second hand: thin, accent teal. */
+  s_analog_hand_sec = lv_line_create(s_analog_scale);
+  lv_line_set_points_mutable(s_analog_hand_sec, s_analog_sec_pts, 2);
+  lv_obj_set_style_line_width(s_analog_hand_sec, 2, 0);
+  lv_obj_set_style_line_rounded(s_analog_hand_sec, true, 0);
+  lv_obj_set_style_line_color(s_analog_hand_sec, lv_color_hex(COLOR_ACCENT), 0);
+
+  /* Minute hand: medium, white. */
+  s_analog_hand_min = lv_line_create(s_analog_scale);
+  lv_line_set_points_mutable(s_analog_hand_min, s_analog_min_pts, 2);
+  lv_obj_set_style_line_width(s_analog_hand_min, 3, 0);
+  lv_obj_set_style_line_rounded(s_analog_hand_min, true, 0);
+  lv_obj_set_style_line_color(s_analog_hand_min, lv_color_hex(COLOR_TIME), 0);
+
+  /* Hour hand: thick, white. */
+  s_analog_hand_hour = lv_line_create(s_analog_scale);
+  lv_obj_set_style_line_width(s_analog_hand_hour, 5, 0);
+  lv_obj_set_style_line_rounded(s_analog_hand_hour, true, 0);
+  lv_obj_set_style_line_color(s_analog_hand_hour, lv_color_hex(COLOR_TIME), 0);
+
+  /* Center pivot dot — rendered on top of all hand roots. */
+  lv_obj_t* dot = lv_obj_create(s_analog_scale);
+  lv_obj_set_size(dot, 8, 8);
+  lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(dot, lv_color_hex(COLOR_ACCENT), 0);
+  lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(dot, 0, 0);
+  lv_obj_center(dot);
+
+  /* Date label: centered in the lower half of the dial (between 4 and 8 o'clock). */
+  s_analog_date_lbl = lv_label_create(s_analog_scale);
+  lv_label_set_text(s_analog_date_lbl, "");
+  lv_obj_set_style_text_color(s_analog_date_lbl, lv_color_hex(COLOR_DATE), 0);
+  lv_obj_set_style_text_align(s_analog_date_lbl, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_bg_color(s_analog_date_lbl, lv_color_hex(COLOR_PANEL_BG), 0);
+  lv_obj_set_style_bg_opa(s_analog_date_lbl, LV_OPA_70, 0);
+  lv_obj_set_style_radius(s_analog_date_lbl, 4, 0);
+  lv_obj_set_style_pad_hor(s_analog_date_lbl, 4, 0);
+  lv_obj_set_style_pad_ver(s_analog_date_lbl, 1, 0);
+  lv_obj_set_style_border_width(s_analog_date_lbl, 0, 0);
+  lv_obj_align(s_analog_date_lbl, LV_ALIGN_CENTER, 0, 18);
+#if LV_FONT_MONTSERRAT_14
+  lv_obj_set_style_text_font(s_analog_date_lbl, &lv_font_montserrat_14, 0);
+#endif
+
+#else /* LV_USE_SCALE not enabled — fall back to a centred digital clock. */
+  s_lbl_hm = lv_label_create(left);
+  lv_label_set_text(s_lbl_hm, "--:--:--");
+  lv_obj_set_style_text_color(s_lbl_hm, lv_color_hex(COLOR_TIME), 0);
+  lv_obj_set_style_text_align(s_lbl_hm, LV_TEXT_ALIGN_CENTER, 0);
+
+  s_label_date = lv_label_create(left);
+  lv_label_set_text(s_label_date, "");
+  lv_obj_set_style_text_color(s_label_date, lv_color_hex(COLOR_DATE), 0);
+  lv_obj_set_style_text_align(s_label_date, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_width(s_label_date, LV_PCT(100));
+
+  apply_clock_fonts();
+#endif /* LV_USE_SCALE */
+}
+
+/**
  * @brief Build and attach the right relay panel (water heater + circulation pump) to the body row.
  *
  * Writes to module-level widget handles: s_heater_state, s_pump_state.
@@ -653,7 +807,13 @@ static void create_body_bar(lv_obj_t* scr, lv_event_cb_t on_ui_event) {
   lv_obj_set_flex_align(body_bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER);
   lv_obj_remove_flag(body_bar, LV_OBJ_FLAG_SCROLLABLE);
 
-  create_clock_col(body_bar);
+  /* --- Clock style: uncomment exactly one of the two lines below. ---
+   *  create_clock_col          → digital: "HH:MM.SS" + date label below.
+   *  create_analog_clock_col   → analog: circular face, second hand, date in center.
+   *    Requires CONFIG_LV_USE_SCALE=y; falls back to digital when not set. */
+  //create_clock_col(body_bar);
+  create_analog_clock_col(body_bar);
+
   //create_relay_panel(body_bar, on_ui_event);
 }
 
@@ -703,7 +863,8 @@ static void create_bottom_bar(lv_obj_t* scr) {
   lv_obj_set_style_radius(s_lux_track, LUX_PILL_H / 2, 0);
   lv_obj_set_style_clip_corner(s_lux_track, true, 0);
   lv_obj_set_style_pad_all(s_lux_track, 0, 0);
-  lv_obj_set_style_border_width(s_lux_track, 0, 0);
+  lv_obj_set_style_border_width(s_lux_track, 1, 0);
+  lv_obj_set_style_border_color(s_lux_track, lv_color_hex(0xFFFFFF), 0);
 
   /* Unlit zone cover: solid COLOR_LUX_UNLIT rectangle from val_line right edge to pill end.
    * Drawn first so threshold and value markers render on top of it. */
@@ -771,8 +932,8 @@ static void create_bottom_bar(lv_obj_t* scr) {
 
   /* Threshold line, e.g. "threshold 800 lx" — updated by ui_main_screen_update_ambient_lux(). */
   s_lux_thr_lbl = lv_label_create(text_col);
-  lv_label_set_text(s_lux_thr_lbl, "threshold 0 lx");
-  lv_obj_set_style_text_color(s_lux_thr_lbl, lv_color_hex(COLOR_DATE), 0);
+  lv_label_set_text(s_lux_thr_lbl, "0 lx");
+  lv_obj_set_style_text_color(s_lux_thr_lbl, lv_color_hex(COLOR_LUX_THR_LINE), 0);
   lv_obj_set_style_text_align(s_lux_thr_lbl, LV_TEXT_ALIGN_CENTER, 0);
 
   /* Sun (WB_SUNNY) glyph — right edge of the pill, bright/day side. */
@@ -831,12 +992,49 @@ void ui_main_screen_create(lv_display_t* display, lv_event_cb_t on_ui_event) {
 }
 
 /**
- * @brief Update digital clock labels from a time string and optional date string.
+ * @brief Update clock display from a time string and optional date string.
  *
- * @param time_str Expects leading "HH:MM:SS" or "HH:MM"; NULL skips time update.
- * @param date_str  Full date line; NULL skips date update.
+ * Dispatches automatically to the analog or digital path depending on which clock
+ * was created (create_analog_clock_col vs create_clock_col).
+ *
+ * Analog path  (LV_USE_SCALE, s_analog_scale != NULL):
+ *   Moves hour, minute, and second needles; updates the date label inside the dial.
+ *
+ * Digital path (s_lbl_hm != NULL):
+ *   Writes "HH:MM." to s_lbl_hm and "SS" to s_lbl_sec; updates s_label_date below.
+ *
+ * @param time_str "HH:MM:SS"; NULL skips time update.
+ * @param date_str Full date line; NULL skips date update.
  */
 void ui_main_screen_update_time(const char* time_str, const char* date_str) {
+#if LV_USE_SCALE
+  /* Analog clock path — active when create_analog_clock_col() was used. */
+  if (s_analog_scale != NULL) {
+    if (time_str != NULL && s_analog_hand_sec != NULL) {
+      int hour = 0;
+      int minute = 0;
+      int second = 0;
+      if (sscanf(time_str, "%2d:%2d:%2d", &hour, &minute, &second) == 3) {
+        hour   %= 12;
+        minute %= 60;
+        second %= 60;
+        lv_scale_set_line_needle_value(s_analog_scale, s_analog_hand_sec,
+                                       ANALOG_SEC_LEN, second);
+        lv_scale_set_line_needle_value(s_analog_scale, s_analog_hand_min,
+                                       ANALOG_MIN_LEN, minute);
+        /* Hour hand: 5 scale units per hour + fractional advance from minutes. */
+        lv_scale_set_line_needle_value(s_analog_scale, s_analog_hand_hour,
+                                       ANALOG_HOUR_LEN, hour * 5 + (minute / 12));
+      }
+    }
+    if (s_analog_date_lbl != NULL && date_str != NULL) {
+      lv_label_set_text(s_analog_date_lbl, date_str);
+    }
+    return;
+  }
+#endif
+
+  /* Digital clock path — active when create_clock_col() was used. */
   if (time_str != NULL && s_lbl_hm != NULL && s_lbl_sec != NULL) {
     int hour = 0;
     int minute = 0;
@@ -886,7 +1084,7 @@ void ui_main_screen_update_ambient_lux(uint32_t lux, uint32_t threshold_lux, uin
   }
   if (s_lux_thr_lbl != NULL) {
     char buf[32];
-    (void) snprintf(buf, sizeof(buf), "threshold %lu lx", (unsigned long)threshold_lux);
+    (void) snprintf(buf, sizeof(buf), "%lu lx", (unsigned long)threshold_lux);
     lv_label_set_text(s_lux_thr_lbl, buf);
   }
 
