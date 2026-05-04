@@ -78,9 +78,9 @@ idf.py menuconfig
 
 - From esp-idf folder do below command: `. ./export.sh` to export 
 
-For detailed build and compilation instructions, see [docs/build.md](docs/build.md).
+For detailed build and compilation instructions, see [docs/BUILD.md](docs/BUILD.md).
 
-For **runtime heap snapshot logging** (optional `mem_check` module, menuconfig, and serial log format), see [docs/memory.md](docs/memory.md). To turn a capture into Markdown tables of approximate per-module deltas, see [docs/parse_mem_log.md](docs/parse_mem_log.md).
+For **runtime heap snapshot logging** (optional `mem_check` module, menuconfig, and serial log format), see [docs/MEMORY.md](docs/MEMORY.md). To turn a capture into Markdown tables of approximate per-module deltas, see [docs/PARSE_MEM_LOG.md](docs/PARSE_MEM_LOG.md).
 
 ### Configuration esp-platform
 - `idf.py menuconfig`
@@ -117,4 +117,4 @@ The main module is the management module (**mgr_ctrl**) which allows for managin
 
 The MQTT protocol is used for bidirectional communication between the Controller and the outside world. This allows you to send information from the controller through the **MQTT Broker** to any other module that has also connected to the broker, as well as send queries from an external module to the controller. Data is sent in **JSON format**.
 
-For detailed MQTT protocol documentation including all modules and message formats, see [docs/mqtt.md](docs/mqtt.md).
+For detailed MQTT protocol documentation including all modules and message formats, see [docs/MQTT_CTRL.md](docs/MQTT_CTRL.md).

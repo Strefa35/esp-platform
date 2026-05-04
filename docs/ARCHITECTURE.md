@@ -1,6 +1,6 @@
 # Firmware architecture
 
-This document describes how the ESP-IDF application is structured: startup, the central manager, optional feature modules, messaging, MQTT bridging, and bulk data reads. It complements topic-level details in [mqtt.md](mqtt.md), board notes in [build.md](build.md), and the LCD stack in [LCD.md](LCD.md).
+This document describes how the ESP-IDF application is structured: startup, the central manager, optional feature modules, messaging, MQTT bridging, and bulk data reads. It complements topic-level details in [MQTT_CTRL.md](MQTT_CTRL.md), board notes in [BUILD.md](BUILD.md), and the LCD stack in [LCD_CTRL.md](LCD_CTRL.md).
 
 ## High-level view
 
@@ -168,7 +168,7 @@ Examples handled inside `mgr_ParseMsg`:
 - **Ethernet disconnected** → stop MQTT client.
 - **MQTT connected** → publish module list JSON, subscribe `REGISTER/ESP/#` and `{uid}/req/{name}` for each registered name.
 
-Exact topic strings and JSON shapes are documented in [mqtt.md](mqtt.md).
+Exact topic strings and JSON shapes are documented in [MQTT_CTRL.md](MQTT_CTRL.md).
 
 ## Bulk reads (`get_fn` / `MGR_GetData`)
 
@@ -193,9 +193,9 @@ New modules: add the component, Kconfig symbol, `main/CMakeLists.txt` wiring, an
 
 | Document | Content |
 | -------- | ------- |
-| [mqtt.md](mqtt.md) | Topics, JSON operations |
-| [LCD.md](LCD.md) | Display, touch, LVGL notes |
-| [build.md](build.md) | Board flash/serial |
-| [memory.md](memory.md) | Heap profiling workflow |
+| [MQTT_CTRL.md](MQTT_CTRL.md) | Topics, JSON operations |
+| [LCD_CTRL.md](LCD_CTRL.md) | Display, touch, LVGL notes |
+| [BUILD.md](BUILD.md) | Board flash/serial |
+| [MEMORY.md](MEMORY.md) | Heap profiling workflow |
 
 Key source anchors: `main/mgr_ctrl.c` (dispatch, `MGR_GetData`), `include/mgr_reg_list.h` (registry), `include/msg.h` (`msg_t`), `include/mgr_reg.h` (`mgr_reg_t`).

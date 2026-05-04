@@ -12,7 +12,7 @@ Board-specific Kconfig defaults live next to the project root:
 | `esp32s2`  | `sdkconfig.defaults.esp32s2.debug`                            |
 | `esp32s3`  | `sdkconfig.defaults.esp32s3.debug`                            |
 
-Flash size, partition table, and optional modules must match your **actual** module; see [README.md](../README.md) (ESP32 custom partition table) and [build.md](build.md) (serial and build notes).
+Flash size, partition table, and optional modules must match your **actual** module; see [README.md](../README.md) (ESP32 custom partition table) and [BUILD.md](BUILD.md) (serial and build notes).
 
 ---
 
@@ -72,7 +72,7 @@ Industrial-style IoT board with **Ethernet (RMII)**, Wi‑Fi, relays, SD card, a
 
 #### Optional peripherals in this firmware
 
-- **LCD**: ILI9341V + NS2009 touch (`CONFIG_LCD_CTRL_ENABLE=y` in ESP32 debug defaults). Wiring, rotation, and touch notes: [LCD.md](LCD.md).
+- **LCD**: ILI9341V + NS2009 touch (`CONFIG_LCD_CTRL_ENABLE=y` in ESP32 debug defaults). Wiring, rotation, and touch notes: [LCD_CTRL.md](LCD_CTRL.md).
 - **Light sensor**: TSL2561 driver under `drivers/tsl2561/` (enabled in ESP32 debug defaults).
 - **CLI / UART console**: `cli_ctrl` is enabled in the current ESP32 default profile, so the serial monitor exposes an `esp>` prompt after boot for field diagnostics and manual commands.
 - Onboard **relays** and other EVB features are controlled when `relay_ctrl` and related options are enabled in Kconfig.
@@ -153,7 +153,7 @@ ESP32-S3 board with **W5500** 10/100 Ethernet on **SPI**, Wi‑Fi, Bluetooth LE;
 #### Optional peripherals (ESP32-S3-ETH)
 
 - `CONFIG_RELAY_CTRL_ENABLE=n` in the checked-in S3 debug defaults — enable if you attach relays.
-- **LCD** is not enabled in the S3 debug defaults; the LCD stack is documented for the ILI9341V + NS2009 setup in [LCD.md](LCD.md).
+- **LCD** is not enabled in the S3 debug defaults; the LCD stack is documented for the ILI9341V + NS2009 setup in [LCD_CTRL.md](LCD_CTRL.md).
 
 ---
 
@@ -161,9 +161,9 @@ ESP32-S3 board with **W5500** 10/100 Ethernet on **SPI**, Wi‑Fi, Bluetooth LE;
 
 | Topic                        | Document                                           |
 | ---------------------------- | -------------------------------------------------- |
-| Build, target switch, serial | [README.md](../README.md), [build.md](build.md) |
-| LCD wiring and LVGL          | [LCD.md](LCD.md)                         |
-| MQTT and JSON                | [mqtt.md](mqtt.md)                       |
-| Heap logging                 | [memory.md](memory.md)                   |
+| Build, target switch, serial | [README.md](../README.md), [BUILD.md](BUILD.md) |
+| LCD wiring and LVGL          | [LCD_CTRL.md](LCD_CTRL.md)                         |
+| MQTT and JSON                | [MQTT_CTRL.md](MQTT_CTRL.md)                       |
+| Heap logging                 | [MEMORY.md](MEMORY.md)                   |
 
 If you use a different PCB revision, clone, or module flash size, treat the tables above as a baseline and verify **schematics**, **flash size**, and **menuconfig** against your hardware.

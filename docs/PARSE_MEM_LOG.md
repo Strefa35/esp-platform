@@ -9,7 +9,7 @@ This script reads a serial or **idf_monitor** log that contains `ESP::MEM` lines
   - `MGR_Init` stages: `mgr_init_begin`, `mgr_init_module_done: <name>`, `mgr_init_done`
   - `MGR_Run` stages: `mgr_run_begin`, `mgr_run_module_done: <name>`
 
-Enable these in menuconfig if needed (see [memory.md](memory.md) for the monitoring options).
+Enable these in menuconfig if needed (see [MEMORY.md](MEMORY.md) for the monitoring options).
 
 ## Usage
 
@@ -47,7 +47,7 @@ ANSI color codes are stripped so logs from **idf_monitor** are accepted as-is.
   `previous_free_heap - current_free_heap`.  
   This is treated as **net heap consumed** between two consecutive snapshots for that module step.
 - **Σ rows** — sum of step deltas should match the overall drop from the baseline line to the last line in that section (within the same block).
-- **Italic footnotes** after each table — when the log line includes `free_8bit`, `min_free_8bit`, and `largest_8bit` (as printed by current firmware), the script repeats those fields at **`mgr_init_done`** and after the **last** `mgr_run_module_done` in the analyzed segment. Deltas in the tables still use **`free_heap` only**; the extra fields help spot fragmentation / high-water marks (see [memory.md](memory.md)). Lines with only `free_heap=` are still accepted.
+- **Italic footnotes** after each table — when the log line includes `free_8bit`, `min_free_8bit`, and `largest_8bit` (as printed by current firmware), the script repeats those fields at **`mgr_init_done`** and after the **last** `mgr_run_module_done` in the analyzed segment. Deltas in the tables still use **`free_heap` only**; the extra fields help spot fragmentation / high-water marks (see [MEMORY.md](MEMORY.md)). Lines with only `free_heap=` are still accepted.
 
 ## Limitations
 
@@ -61,4 +61,4 @@ ANSI color codes are stripped so logs from **idf_monitor** are accepted as-is.
 - `include/mem_check.h` / `main/mem_check.c` — heap logging API and implementation (see Doxygen in sources)
 - `main/main.c` — `mem_Init`, `MEM_CHECK(mem_LogSnapshot(...))` boot checkpoints
 - `main/mgr_ctrl.c` — `mem_LogSnapshot` call sites for init/run
-- [memory.md](memory.md) — firmware memory monitoring configuration
+- [MEMORY.md](MEMORY.md) — firmware memory monitoring configuration
