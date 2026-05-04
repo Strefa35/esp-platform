@@ -253,4 +253,3 @@ Both transports can be enabled simultaneously — `coap_ctrl` and `mqtt_ctrl` ar
 - [ARCHITECTURE.md](ARCHITECTURE.md) — Manager + Registry pattern, `msg_t` routing
 - [MQTT_CTRL.md](MQTT_CTRL.md) — MQTT topic structure used for peer discovery
 - [BOARD.md](BOARD.md) — Hardware comparison (ESP32-EVB vs ESP32-S3-ETH)
-- [docs/todo/COAP.md](todo/COAP.md) — Original design document

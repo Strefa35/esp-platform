@@ -20,6 +20,7 @@
 #include "sdkconfig.h"
 
 #include "err.h"
+#include "mgr_ctrl.h"
 #include "msg.h"
 #include "template_ctrl.h"
 
@@ -42,6 +43,43 @@ static TaskHandle_t       template_task_id = NULL;
 static SemaphoreHandle_t  template_sem_id = NULL;
 
 static data_uid_t         esp_uid = {0};
+
+
+static esp_err_t templatectrl_PrepareResponse(const char* request_operation) {
+  msg_t msg = {
+    .type = MSG_TYPE_MQTT_PUBLISH,
+    .from = REG_XXX_CTRL,
+    .to = REG_MQTT_CTRL,
+  };
+  esp_err_t result = ESP_FAIL;
+
+  ESP_LOGI(TAG, "++%s(request_operation: '%s')", __func__, request_operation);
+
+  cJSON* response = cJSON_CreateObject();
+  if (response != NULL) {
+    int ret = -1;
+
+    cJSON_AddStringToObject(response, "operation", "response");
+    cJSON_AddStringToObject(response, "request", request_operation);
+
+    ret = cJSON_PrintPreallocated(response, msg.payload.mqtt.u.data.msg, DATA_MSG_SIZE, 0);
+    if (ret == 1) {
+      snprintf(msg.payload.mqtt.u.data.topic, DATA_TOPIC_SIZE, "%s/res/template", esp_uid);
+      result = MGR_Send(&msg);
+      if (result != ESP_OK) {
+        ESP_LOGE(TAG, "[%s] MGR_Send() - Error: %d", __func__, result);
+      }
+    } else {
+      ESP_LOGE(TAG, "[%s] cJSON_PrintPreallocated() - Error: %d", __func__, ret);
+      result = ESP_FAIL;
+    }
+
+    cJSON_Delete(response);
+  }
+
+  ESP_LOGI(TAG, "--%s() - result: %d", __func__, result);
+  return result;
+}
 
 
 /**
@@ -72,13 +110,15 @@ static esp_err_t parseMqttData(const char* json_str) {
   cJSON* root = cJSON_Parse(json_str);
   if (root) {
     const cJSON* operation = cJSON_GetObjectItem(root, "operation");
-    if (operation) {
+    if (cJSON_IsString(operation)) {
       const char* o_str = cJSON_GetStringValue(operation);
       ESP_LOGD(TAG, "[%s] operation: '%s'", __func__, o_str);
 
       if (strcmp(o_str, "set") == 0) {
+        result = templatectrl_PrepareResponse("set");
 
       } else if (strcmp(o_str, "get") == 0) {
+        result = templatectrl_PrepareResponse("get");
 
       } else {
         ESP_LOGW(TAG, "[%s] Unknown operation: '%s'", __func__, o_str);

@@ -65,10 +65,10 @@ The template includes a JSON parser stub that recognises `"operation": "set"` an
 { "operation": "get" }
 ```
 
-Responses are published to `{uid}/rsp/template`:
+Responses are published to `{uid}/res/template`:
 
 ```json
-{ "operation": "rsp", "key": "value" }
+{ "operation": "response", "request": "get" }
 ```
 
 ---
@@ -89,7 +89,7 @@ case MSG_TYPE_MGR_UID: {
 Then uses it for topic construction:
 
 ```c
-snprintf(topic, sizeof(topic), "%s/rsp/template", esp_uid);
+snprintf(topic, sizeof(topic), "%s/res/template", esp_uid);
 ```
 
 ---

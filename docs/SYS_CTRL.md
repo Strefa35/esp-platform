@@ -89,11 +89,11 @@ Topic: `{uid}/req/sys`
 { "operation": "get", "fields": "all" }
 ```
 
-Response published to `{uid}/rsp/sys`:
+Response published to `{uid}/res/sys`:
 
 ```json
 {
-  "operation": "rsp",
+    "operation": "response",
   "timezone": "CET-1CEST,M3.5.0,M10.5.0/3",
   "time": "2026-05-04T12:34:56",
   "ntp_servers": ["pool.ntp.org"]

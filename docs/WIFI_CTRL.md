@@ -10,7 +10,7 @@ Station-mode (STA) Wi-Fi controller. Supports network scanning, connection manag
 
 | Operation | Trigger message | Description |
 |---|---|---|
-| **Scan** | `MSG_TYPE_WIFI_SCAN_REQ` | Non-blocking scan request; result returned via `MSG_TYPE_WIFI_SCAN_RESULT` |
+| **Scan** | `MSG_TYPE_WIFI_SCAN_REQ` | Asynchronous for the requester: request is queued and handled by `wifi_ctrl`, while the worker performs an internal blocking scan via `esp_wifi_scan_start(block=true)`; result is returned via `MSG_TYPE_WIFI_SCAN_RESULT` |
 | **Connect** | `MSG_TYPE_WIFI_CONNECT` | Set SSID/password and call `esp_wifi_connect()` |
 | **Disconnect** | `MSG_TYPE_WIFI_DISCONNECT` | Call `esp_wifi_disconnect()` |
 
@@ -61,6 +61,8 @@ sequenceDiagram
     WIFI->>MGR: MSG_TYPE_WIFI_SCAN_RESULT\n{ap_records[], count}
     MGR->>SRC: forward result
 ```
+
+Note: the request path is asynchronous for the caller, but scan execution inside the `wifi_ctrl` worker task is blocking by design (`esp_wifi_scan_start(block=true)`).
 
 ### Connect / IP acquisition
 

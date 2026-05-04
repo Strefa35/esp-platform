@@ -11,8 +11,9 @@ if echo "$FILE_PATH" | grep -qE '/modules/[^/]+/[^/]+\.c$'; then
   echo ""
   echo "Registration checklist for '$MODULE':"
   echo "  1. include/mgr_reg_list.h  — add #include and mgr_reg_t entry (before mqtt_ctrl)"
-  echo "  2. main/CMakeLists.txt     — add to CMAKE_BUILD_EARLY_EXPANSION list and CONFIG_ block"
-  echo "  3. include/types.h         — add REG_<NAME>_CTRL to the module type enum"
+  echo "  2. include/msg.h           — add REG_<NAME>_CTRL bitmask #define"
+  echo "  3. modules/Kconfig.inc     — add orsource line"
+  echo "  4. main/CMakeLists.txt     — add to CMAKE_BUILD_EARLY_EXPANSION list and CONFIG_ block"
 fi
 
 exit 0

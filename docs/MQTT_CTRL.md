@@ -33,7 +33,7 @@ modules/mqtt_ctrl/
 ```
 
 ---
-
+\
 ## NVS Configuration (Redundant Slots)
 
 Broker credentials are stored in the NVS partition `"config"` with two redundant slots plus a boot-selector key:
@@ -136,7 +136,7 @@ sequenceDiagram
 ```
 {uid}/req/{module}   — inbound commands (subscribed by the device)
 {uid}/event/{module} — outbound events (published by the device)
-{uid}/rsp/{module}   — outbound responses
+{uid}/res/{module}   — outbound responses
 ```
 
 Where `{uid}` = `ESP/XXXXXX` (last 3 bytes of Ethernet MAC, e.g. `ESP/12AB34`).
@@ -269,7 +269,7 @@ Configuration of MQTT broker connection.
 
 Control of relay switches.
 
-**Topics:** `ESP/12AB34/req/relay` (request), `ESP/12AB34/res/relay` (response), `ESP/12AB34/event/relay` (event)
+**Topics:** `ESP/12AB34/req/relay` (request), `ESP/12AB34/res/relay` (response and event)
 
 **Set relay state:**
 ```json
@@ -287,7 +287,7 @@ Control of relay switches.
 { "operation": "get" }
 ```
 
-**Response / Event:**
+**Response / Event** (both published on `ESP/12AB34/res/relay`):
 ```json
 {
   "operation": "response",
@@ -297,6 +297,8 @@ Control of relay switches.
   ]
 }
 ```
+
+For successful `set`, the payload uses `"operation": "event"` with the same `relays` structure.
 
 ---
 
