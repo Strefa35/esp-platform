@@ -20,16 +20,20 @@ Follow the exact pattern from `modules/template_ctrl/`. Create all files below, 
 
 ### Files to modify
 
-5. **`include/mgr_reg_list.h`**:
+1. **`include/msg.h`** — add a `REG_<NAME>_CTRL` bitmask `#define` (pick the next free bit in the appropriate group).
+
+2. **`include/mgr_reg_list.h`**:
    - Add `#ifdef CONFIG_<NAME>_CTRL_ENABLE` / `#include "<name>_ctrl.h"` / `#endif` in the includes block
    - Add a `mgr_reg_t` entry in `mgr_reg_list[]` (before the `cli_ctrl` entry, and definitely before `mqtt_ctrl` which must stay last)
-   - Add a `REG_<NAME>_CTRL` type value — check `include/types.h` for the enum and add there too
 
-6. **`main/CMakeLists.txt`**:
+3. **`modules/Kconfig.inc`** — add `orsource "<name>_ctrl/Kconfig.inc"` to the list.
+
+4. **`main/CMakeLists.txt`**:
    - Under `CMAKE_BUILD_EARLY_EXPANSION`: add `<name>_ctrl` to the list
    - Add a conditional block: `if(CONFIG_<NAME>_CTRL_ENABLE)` → append include dir and priv require
 
 After creating all files, print a summary of the `sdkconfig.defaults` line needed to enable the module:
-```
+
+```kconfig
 CONFIG_<NAME>_CTRL_ENABLE=y
 ```

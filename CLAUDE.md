@@ -22,10 +22,8 @@ idf.py menuconfig
 # Build
 idf.py build
 
-# Flash and monitor (USB-A)
+# Flash and monitor (ESP32-EVB: USB-A → ttyUSB0; S2/S3: USB-C → ttyACM0)
 idf.py -p /dev/ttyUSB0 flash monitor
-
-# Flash and monitor (USB-C)
 idf.py -p /dev/ttyACM0 flash monitor
 
 # Save current config as new defaults
@@ -70,9 +68,21 @@ Each module runs its own FreeRTOS task with an internal message queue (`QueueHan
 
 If `msg.to` includes `REG_MGR_CTRL`, the manager also runs `mgr_ParseMsg` locally before forwarding (e.g. Ethernet IP → start MQTT, MQTT connected → subscribe topics).
 
+### Task lifecycle and custom error codes (`err.h`)
+
+Each module task loops on `xQueueReceive`. The `parseMsg` function returns one of three sentinel values from `include/err.h` to control the loop:
+
+- `ESP_TASK_INIT` — reserved for `MSG_TYPE_INIT`
+- `ESP_TASK_RUN` — reserved for `MSG_TYPE_RUN`
+- `ESP_TASK_DONE` — `MSG_TYPE_DONE` received; task exits loop and calls `xSemaphoreGive`
+
+The `done_fn` sends `MSG_TYPE_DONE` directly to the module's own queue (bypassing the manager), then blocks on `xSemaphoreTake` until the task exits. This is the universal teardown pattern used by every module.
+
 ### MQTT Topic Routing
 
 Inbound MQTT payloads of the form `{uid}/req/{module-name}` are routed by the manager to the matching module's `send_fn` by name. `mqtt_ctrl` carries `REG_INT_CTRL` in its `type` field, which marks it as internal-only and prevents external addressing.
+
+The device UID is derived from the last 3 bytes of the Ethernet MAC: `ESP/XXXXXX` (e.g. `ESP/12AB34`). It is broadcast to all modules via `MSG_TYPE_MGR_UID` during initialization so each module can construct its own MQTT topics.
 
 ### LCD Update Path
 
@@ -81,11 +91,7 @@ Modules outside `lcd_ctrl` push display state via two mechanisms:
 1. **Direct call** (within `lcd_ctrl` task context or thread-safe helper): `lcd_UpdateData(mask, &update)` defined in `modules/lcd_ctrl/include/lcd_helper.h`.
 2. **Message bus** (from any other module): send `MSG_TYPE_LCD_DATA` with a `payload_lcd_t` (`mask` + `d_uint32[8]` array). The manager forwards it to `lcd_ctrl`, which calls `lcd_UpdateData` internally.
 
-`LCD_MASK_*` bits are split across two headers:
-- `modules/lcd_ctrl/include/lcd_helper.h` — most masks (board, ETH, WiFi, MQTT, relay)
-- `include/lcd_mask.h` — shared masks used by modules outside `lcd_ctrl` (ambient lux, threshold)
-
-Only include `lcd_mask.h` from non-LCD modules; `lcd_helper.h` is `lcd_ctrl`-internal.
+All `LCD_MASK_*` bits are defined in `modules/lcd_ctrl/include/lcd_helper.h` — do not include it from outside `lcd_ctrl`. Non-LCD modules that need specific mask values (e.g. ambient lux) define local `#define` copies with a `/* Keep in sync with LCD_MASK_* in lcd_helper.h */` comment.
 
 ### Custom Drivers
 
@@ -104,22 +110,49 @@ Internal layers:
 
 Display rotation is handled in the **flush callback** (rotating pixel data with `lv_draw_sw_rotate`). Do **not** manually unrotate touch coordinates in the NS2009 read callback — LVGL handles that automatically after `lv_indev_set_display`.
 
-Material Icons font: `fonts/lv_font_material_icons_22.c`. Regenerate with `fonts/gen_material_icons_font.sh` (requires Docker + `lv_font_conv`).
+Material Icons font: `modules/lcd_ctrl/fonts/lv_font_material_icons_22.c`. Regenerate with `modules/lcd_ctrl/fonts/gen_material_icons_font.sh` (requires Docker + `lv_font_conv`).
 
-See `docs/LCD.md` for wiring, calibration details, and current UI structure.
+See `docs/LCD_CTRL.md` for wiring, calibration details, and current UI structure.
 
 ### New Module Reference
 
-Use `modules/template_ctrl/` as the implementation template. The pattern: static `QueueHandle_t` + `TaskHandle_t` + `SemaphoreHandle_t`, one FreeRTOS task, JSON parsing via cJSON, and five exported `XxxCtrl_*` functions registered in `mgr_reg_list.h`.
+Use `modules/template_ctrl/` as the implementation template. The pattern: static `QueueHandle_t` + `TaskHandle_t` + `SemaphoreHandle_t`, one FreeRTOS task, JSON parsing via cJSON, and four exported `XxxCtrl_*` functions (`Init`, `Done`, `Run`, `Send`) registered in `mgr_reg_list.h`.
 
-Assign the new module a unique `REG_*_CTRL` bit in `include/msg.h` and a `MSG_TYPE_*` variant if it introduces new message types.
+Assign the new module a unique `REG_*_CTRL` bit in `include/msg.h` and a `MSG_TYPE_*` variant if it introduces new message types. Also add a `if(CONFIG_<NAME>_CTRL_ENABLE)` block to `main/CMakeLists.txt` and an `orsource` line to `modules/Kconfig.inc`.
 
 `cli_ctrl` demonstrates splitting CLI sub-commands across multiple files (`cli_lcd.c`, `cli_wifi.c`) — each file registers its own `esp_console` commands and is conditionally compiled on the combination of `CONFIG_CLI_CTRL_ENABLE && CONFIG_<OTHER>_CTRL_ENABLE`.
 
 ## Key Documentation
 
-- `docs/architecture.md` — comprehensive architecture reference with sequence and flow diagrams
-- `docs/mqtt.md` — MQTT topic structure and JSON message formats
-- `docs/build.md` — Board-specific flash/serial connection notes
-- `docs/LCD.md` — LCD wiring, touch calibration, LVGL UI structure, and Kconfig options
-- `docs/memory.md` — Heap profiling; use `scripts/parse_mem_log.py` to analyze logs
+### Architecture & Design
+
+- `docs/ARCHITECTURE.md` — comprehensive architecture reference with sequence and flow diagrams
+
+### Build & Hardware
+
+- `docs/BUILD.md` — board-specific build, flash, and serial connection notes
+- `docs/BOARD.md` — hardware comparison table for all three supported boards (GPIO pinouts, flash/PSRAM, Ethernet type)
+- `docs/MCU.md` — SoC-level details and memory map notes
+
+### Module Reference
+
+Each module has a dedicated doc at `docs/<MODULE>_CTRL.md`:
+
+- `docs/ETH_CTRL.md` — Ethernet: MAC/PHY init, link-state events
+- `docs/WIFI_CTRL.md` — Wi-Fi STA: scan, connect, IP events, `get_fn` scan results
+- `docs/MQTT_CTRL.md` — MQTT bridge: topic routing, NVS config, broker lifecycle
+- `docs/RELAY_CTRL.md` — relay GPIO control via MQTT set/get
+- `docs/SENSOR_CTRL.md` — TSL2561 ambient-light sensor, per-sensor tasks
+- `docs/LCD_CTRL.md` — LCD wiring, touch calibration, LVGL UI structure, Kconfig options
+- `docs/SYS_CTRL.md` — NTP sync, timezone management, system info MQTT
+- `docs/CLI_CTRL.md` — UART/USB-CDC REPL, sub-command split pattern
+- `docs/CFG_CTRL.md` — configuration controller placeholder
+- `docs/GPIO_CTRL.md` — GPIO controller placeholder
+- `docs/COAP_CTRL.md` — CoAP/UDP peer-to-peer module (in progress)
+- `docs/TEMPLATE_CTRL.md` — reference implementation / new-module scaffold
+
+### Tools & Scripts
+
+- `docs/MEMORY.md` — heap profiling workflow (flash size + runtime heap)
+- `docs/PARSE_MEM_LOG.md` — `scripts/parse_mem_log.py` usage and output format
+- `docs/WIFI.md` — Wi-Fi provisioning and connection flow (extended reference)
